@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:debt_tracker/core/date_utils.dart';
 import 'package:debt_tracker/data/repositories/repositories.dart';
+import 'package:debt_tracker/data/services/ledger_service.dart';
 import 'package:debt_tracker/data/services/settings_service.dart';
 import 'package:debt_tracker/data/sources/sms/sms_parser_config.dart';
 import 'package:debt_tracker/domain/finance/portfolio.dart';
@@ -35,6 +36,15 @@ class _MemorySettings implements SettingsRepository {
   @override
   Future<void> set(String key, String? value) async =>
       value == null ? _m.remove(key) : _m[key] = value;
+}
+
+/// Records spending instead of writing to a database.
+class _RecordingLedger implements LedgerService {
+  final spending = <(String, double)>[];
+  @override
+  Future<void> addSpending(String lineId, double amount) async => spending.add((lineId, amount));
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 /// Sample data shaped like real use: a card with a 0% installment billed
@@ -87,12 +97,14 @@ void main() {
 
   setUp(() => portfolio = samplePortfolio());
 
-  Future<ProviderContainer> pump(WidgetTester tester, Widget screen, {PortfolioSummary? data}) async {
+  Future<ProviderContainer> pump(WidgetTester tester, Widget screen,
+      {PortfolioSummary? data, LedgerService? ledger}) async {
     tester.view.physicalSize = const Size(390 * 3, 844 * 3);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
     final container = ProviderContainer(overrides: [
       portfolioProvider.overrideWith((ref) async => data ?? portfolio),
+      if (ledger != null) ledgerProvider.overrideWithValue(ledger),
       settingsRepositoryProvider.overrideWithValue(_MemorySettings()),
       notificationPrefsProvider.overrideWith((ref) async => const NotificationPrefs()),
       smsConfigProvider.overrideWith(
@@ -138,6 +150,28 @@ void main() {
       await settle(tester);
     });
   }
+
+  testWidgets('add spending adds the amount to that sub-limit', (tester) async {
+    final ledger = _RecordingLedger();
+    await pump(tester, const AccountDetailScreen(accountId: 'a1'), ledger: ledger);
+    await tester.scrollUntilVisible(find.text('เพิ่มยอดใช้จ่าย'), 300, scrollable: find.byType(Scrollable).first);
+    await settle(tester);
+    await tester.tap(find.text('เพิ่มยอดใช้จ่าย'));
+    await settle(tester);
+    expect(find.textContaining('ยอดคงค้างตอนนี้ ฿12,000.00'), findsOneWidget);
+
+    // Empty amount is rejected.
+    await tester.tap(find.text('บันทึก'));
+    await settle(tester);
+    expect(find.text('กรุณากรอก'), findsOneWidget);
+    expect(ledger.spending, isEmpty);
+
+    await tester.enterText(find.byType(TextFormField), '1,200');
+    await tester.tap(find.text('บันทึก'));
+    await settle(tester);
+    expect(ledger.spending, [('l1', 1200.0)]);
+    expect(find.text('เพิ่มยอดใช้จ่าย ฿1,200.00 แล้ว · ยอดคงค้าง ฿13,200.00'), findsOneWidget);
+  });
 
   testWidgets('account form: new and edit', (tester) async {
     await pump(tester, const AccountFormScreen());

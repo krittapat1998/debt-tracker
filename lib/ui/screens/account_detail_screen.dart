@@ -252,8 +252,16 @@ class _LineTile extends ConsumerWidget {
                 const SizedBox(height: 4),
                 UsageBar(used: used, limit: line.creditLimit),
               ],
-              const SizedBox(height: 4),
-              Text('แตะเพื่อแก้ยอดคงค้าง', style: t.bodySmall),
+              Row(
+                children: [
+                  Expanded(child: Text('แตะเพื่อแก้ยอดคงค้าง', style: t.bodySmall)),
+                  TextButton.icon(
+                    icon: const Icon(Icons.add_shopping_cart, size: 18),
+                    label: const Text('เพิ่มยอดใช้จ่าย'),
+                    onPressed: () => _addSpending(context, ref),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
@@ -290,6 +298,49 @@ class _LineTile extends ConsumerWidget {
     if (value == null) return;
     await ref.read(ledgerProvider).setLineBalance(line.id, value);
     ref.refreshData();
+  }
+
+  /// Adds one purchase on top of the balance, so the user doesn't have to
+  /// work out the new total like [_editBalance] needs.
+  Future<void> _addSpending(BuildContext context, WidgetRef ref) async {
+    final controller = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    final amount = await showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('เพิ่มยอดใช้จ่าย: ${line.name}'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AmountField(controller: controller, label: 'ยอดที่ใช้', required: true, allowZero: false, autofocus: true),
+              const SizedBox(height: 8),
+              Text(
+                'บวกเพิ่มจากยอดคงค้างตอนนี้ ${fmtMoney(line.balance)} '
+                '— ถ้าแบ่งจ่ายเป็นงวด ให้ใช้ "เพิ่มรายการผ่อน" แทน',
+                style: const TextStyle(fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ยกเลิก')),
+          FilledButton(
+            onPressed: () {
+              if (formKey.currentState!.validate()) Navigator.pop(ctx, parseAmount(controller.text));
+            },
+            child: const Text('บันทึก'),
+          ),
+        ],
+      ),
+    );
+    if (amount == null) return;
+    await ref.read(ledgerProvider).addSpending(line.id, amount);
+    ref.refreshData();
+    if (context.mounted) {
+      showSnack(context, 'เพิ่มยอดใช้จ่าย ${fmtMoney(amount)} แล้ว · ยอดคงค้าง ${fmtMoney(line.balance + amount)}');
+    }
   }
 }
 

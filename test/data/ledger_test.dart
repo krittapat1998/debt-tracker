@@ -60,6 +60,11 @@ void main() {
     expect(await payments.getAll(), isEmpty);
   });
 
+  test('spending adds to the sub-limit balance', () async {
+    await ledger.addSpending('l', 1200);
+    expect((await lines.getById('l'))!.balance, 11200);
+  });
+
   test('overpaying never pushes the balance below zero, and undo is exact', () async {
     final p = await ledger.recordPayment(payment(15000));
     expect((await lines.getById('l'))!.balance, 0);
