@@ -40,8 +40,10 @@ class RawStatementMessage {
   /// between the live SMS receiver and a later inbox scan (which report
   /// different platform ids), and survive app restarts, so it is built
   /// from sender, send time (to the second) and a stable body hash.
-  String get dedupKey =>
-      '${source.name}|${sender.trim().toLowerCase()}|${receivedAt.millisecondsSinceEpoch ~/ 1000}|${_fnv1a(body.trim())}';
+  /// Pasted text has no real send time, so only its body counts.
+  String get dedupKey => source == StatementSourceType.pasted
+      ? '${source.name}|${_fnv1a(body.trim())}'
+      : '${source.name}|${sender.trim().toLowerCase()}|${receivedAt.millisecondsSinceEpoch ~/ 1000}|${_fnv1a(body.trim())}';
 }
 
 /// 32-bit FNV-1a; unlike String.hashCode it is stable across runs.

@@ -97,6 +97,8 @@ const smsCaptureKeywords = [
 ];
 
 /// Parsed bank messages waiting for the user to confirm or dismiss.
+enum PasteResult { added, unreadable, alreadyPending, alreadyImported }
+
 class PendingImportsNotifier extends Notifier<List<ParsedStatementEvent>> {
   StreamSubscription<RawStatementMessage>? _sub;
 
@@ -125,16 +127,23 @@ class PendingImportsNotifier extends Notifier<List<ParsedStatementEvent>> {
   }
 
   /// Parses text the user pasted (works on both iOS and Android).
-  Future<ParsedStatementEvent?> addPasted(String text) async {
-    final importer = await ref.read(importServiceProvider.future);
-    final e = importer.parse(RawStatementMessage(
+  /// Text imported before is only added again with [force], so a payment
+  /// SMS pasted twice is not recorded twice by accident.
+  Future<PasteResult> addPasted(String text, {bool force = false}) async {
+    final m = RawStatementMessage(
       source: StatementSourceType.pasted,
       sender: '',
       body: text,
       receivedAt: DateTime.now(),
-    ));
-    if (e != null) state = [e, ...state];
-    return e;
+    );
+    if (state.any((e) => e.message.dedupKey == m.dedupKey)) return PasteResult.alreadyPending;
+    if (!force && (await ref.read(settingsServiceProvider).seenSmsKeys()).contains(m.dedupKey)) {
+      return PasteResult.alreadyImported;
+    }
+    final e = (await ref.read(importServiceProvider.future)).parse(m);
+    if (e == null) return PasteResult.unreadable;
+    state = [e, ...state];
+    return PasteResult.added;
   }
 
   Future<int> scanInbox({int days = 45}) async {
@@ -173,7 +182,9 @@ class PendingImportsNotifier extends Notifier<List<ParsedStatementEvent>> {
 
   Future<void> resolve(ParsedStatementEvent e, {required bool imported}) async {
     state = state.where((x) => x.message.dedupKey != e.message.dedupKey).toList();
-    if (e.message.source != StatementSourceType.pasted) {
+    // Inbox SMS are remembered either way so a rescan skips them; pasted
+    // text only once imported, so a wrongly rejected paste can come back.
+    if (imported || e.message.source != StatementSourceType.pasted) {
       await ref.read(settingsServiceProvider).addSeenSmsKeys([e.message.dedupKey]);
     }
   }

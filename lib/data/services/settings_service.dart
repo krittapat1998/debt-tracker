@@ -24,6 +24,7 @@ class SettingsService {
   static const _notifEnabled = 'notif_enabled';
   static const _notifHour = 'notif_hour';
   static const _notifBilling = 'notif_billing';
+  static const _notifAsked = 'notif_asked';
   static const _smsLastScan = 'sms_last_scan';
   static const _smsListen = 'sms_listen';
   static const _smsCustomPatterns = 'sms_custom_patterns';
@@ -40,6 +41,11 @@ class SettingsService {
     await _repo.set(_notifHour, '${p.hour}');
     await _repo.set(_notifBilling, p.billingReminders ? '1' : '0');
   }
+
+  /// Whether the app has asked for notification permission on its own.
+  Future<bool> notificationPermissionAsked() async => (await _repo.get(_notifAsked)) == '1';
+
+  Future<void> setNotificationPermissionAsked() => _repo.set(_notifAsked, '1');
 
   Future<DateTime?> lastSmsScan() async =>
       DateTime.tryParse(await _repo.get(_smsLastScan) ?? '');

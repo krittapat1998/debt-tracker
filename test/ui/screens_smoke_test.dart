@@ -214,4 +214,30 @@ void main() {
     // Matched by card digits to the KTC account.
     expect(find.text('KTC Visa Platinum •••• 1234'), findsOneWidget);
   });
+
+  test('pasting the same SMS again neither queues nor imports it twice', () async {
+    final container = ProviderContainer(overrides: [
+      portfolioProvider.overrideWith((ref) async => samplePortfolio()),
+      settingsRepositoryProvider.overrideWithValue(_MemorySettings()),
+      smsConfigProvider.overrideWith(
+          (ref) async => SmsParserConfig.fromJsonString(File('assets/sms_patterns.json').readAsStringSync())),
+    ]);
+    addTearDown(container.dispose);
+    final pending = container.read(pendingImportsProvider.notifier);
+    const sms = 'KTC: ได้รับชำระบัตร x1234 จำนวน 2,000.00 บ. วันที่ 30/10/69';
+
+    expect(await pending.addPasted(sms), PasteResult.added);
+    expect(await pending.addPasted(sms), PasteResult.alreadyPending);
+    expect(container.read(pendingImportsProvider), hasLength(1));
+
+    // A rejected paste can be pasted again.
+    await pending.resolve(container.read(pendingImportsProvider).single, imported: false);
+    expect(await pending.addPasted(sms), PasteResult.added);
+
+    // An imported one needs an explicit "add again".
+    await pending.resolve(container.read(pendingImportsProvider).single, imported: true);
+    expect(await pending.addPasted(sms), PasteResult.alreadyImported);
+    expect(container.read(pendingImportsProvider), isEmpty);
+    expect(await pending.addPasted(sms, force: true), PasteResult.added);
+  });
 }

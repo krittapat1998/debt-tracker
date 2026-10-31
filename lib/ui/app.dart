@@ -37,6 +37,7 @@ class HomeShell extends ConsumerStatefulWidget {
 
 class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserver {
   int _tab = 0;
+  bool _permissionChecked = false;
 
   @override
   void initState() {
@@ -71,8 +72,19 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
   }
 
   Future<void> _syncSideEffects(PortfolioSummary s) async {
-    final prefs = await ref.read(settingsServiceProvider).notificationPrefs();
-    await ref.read(notificationServiceProvider).reschedule(s, prefs);
+    final settings = ref.read(settingsServiceProvider);
+    final notifications = ref.read(notificationServiceProvider);
+    final prefs = await settings.notificationPrefs();
+    // Reminders are on by default, so ask for permission once, as soon as
+    // there is something to remind about. Without it nothing is shown.
+    if (prefs.enabled && s.accounts.isNotEmpty && !_permissionChecked) {
+      _permissionChecked = true;
+      if (!await settings.notificationPermissionAsked()) {
+        await settings.setNotificationPermissionAsked();
+        await notifications.requestPermission();
+      }
+    }
+    await notifications.reschedule(s, prefs);
     await ref.read(homeWidgetServiceProvider).update(s);
   }
 

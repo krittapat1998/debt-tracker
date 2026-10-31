@@ -31,7 +31,8 @@
         android:textColor="#E6FFFFFF"
         android:textSize="12sp" />
 
-    <View
+    <!-- Divider: RemoteViews only inflate whitelisted classes, plain View is not one. -->
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:layout_marginTop="8dp"

@@ -64,10 +64,18 @@ class SettingsScreen extends ConsumerWidget {
           ),
           ListTile(
             leading: const Icon(Icons.notifications_active_outlined),
-            title: const Text('ขอสิทธิ์แจ้งเตือนอีกครั้ง'),
+            title: const Text('ทดสอบการแจ้งเตือน'),
+            subtitle: const Text('ขอสิทธิ์ (ถ้ายังไม่ได้ให้) แล้วส่งการแจ้งเตือนตัวอย่างทันที'),
             onTap: () async {
-              final ok = await ref.read(notificationServiceProvider).requestPermission();
-              if (context.mounted) showSnack(context, ok ? 'อนุญาตแจ้งเตือนแล้ว' : 'ยังไม่ได้รับอนุญาต — เปิดได้ในการตั้งค่าของเครื่อง');
+              final notifications = ref.read(notificationServiceProvider);
+              final ok = await notifications.requestPermission();
+              if (ok) {
+                await notifications.showTest();
+                // Reminders scheduled before permission was granted never fire.
+                ref.refreshData();
+              } else if (context.mounted) {
+                showSnack(context, 'ยังไม่ได้รับอนุญาต — เปิดได้ในการตั้งค่าของเครื่อง');
+              }
             },
           ),
           const SectionHeader('SMS ธนาคาร'),

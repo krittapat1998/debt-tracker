@@ -81,6 +81,18 @@ class NotificationService {
     return false;
   }
 
+  /// Shows one notification right away, so the user can check that
+  /// reminders are allowed and how they look on this device.
+  Future<void> showTest() async {
+    await init();
+    await _plugin.show(
+      id: 999,
+      title: 'ทดสอบการแจ้งเตือน',
+      body: 'ถ้าเห็นข้อความนี้ แอพจะเตือนก่อนวันครบกำหนดได้ตามปกติ',
+      notificationDetails: _details,
+    );
+  }
+
   /// Returns how many reminders were scheduled.
   Future<int> reschedule(PortfolioSummary s, NotificationPrefs prefs, {DateTime? now}) async {
     try {

@@ -117,15 +117,45 @@ class _SmsImportScreenState extends ConsumerState<SmsImportScreen> with WidgetsB
     final chunks = text.split(RegExp(r'\n\s*\n')).where((c) => c.trim().isNotEmpty).toList();
     final notifier = ref.read(pendingImportsProvider.notifier);
     var found = 0;
+    var known = 0;
+    final imported = <String>[];
     for (final c in chunks) {
-      if (await notifier.addPasted(c) != null) found++;
+      switch (await notifier.addPasted(c)) {
+        case PasteResult.added:
+          found++;
+        case PasteResult.alreadyPending:
+          known++;
+        case PasteResult.alreadyImported:
+          imported.add(c);
+        case PasteResult.unreadable:
+          break;
+      }
+    }
+    if (imported.isNotEmpty && mounted) {
+      final again = await confirmDialog(
+        context,
+        title: 'เคยบันทึกข้อความนี้แล้ว',
+        message: '${imported.length == 1 ? 'SMS นี้' : 'SMS ${imported.length} ข้อความนี้'}ถูกบันทึกไปแล้ว '
+            'ถ้าเพิ่มอีกครั้ง ยอดอาจถูกนับซ้ำ',
+        confirmLabel: 'เพิ่มอีกครั้ง',
+      );
+      if (again) {
+        for (final c in imported) {
+          if (await notifier.addPasted(c, force: true) == PasteResult.added) found++;
+        }
+      } else {
+        known += imported.length;
+      }
     }
     if (!mounted) return;
-    if (found == 0) {
-      showSnack(context, 'อ่านยอดจากข้อความนี้ไม่ได้ — ลองกรอกเอง หรือเพิ่มรูปแบบ SMS ในตั้งค่า');
-    } else {
+    if (found > 0) {
       _paste.clear();
       showSnack(context, 'อ่านได้ $found รายการ ตรวจสอบด้านล่างก่อนบันทึก');
+    } else if (known > 0) {
+      _paste.clear();
+      showSnack(context, 'ไม่มีรายการใหม่ — ข้อความนี้อยู่ในรายการรอตรวจสอบหรือบันทึกไปแล้ว');
+    } else {
+      showSnack(context, 'อ่านยอดจากข้อความนี้ไม่ได้ — ลองกรอกเอง หรือเพิ่มรูปแบบ SMS ในตั้งค่า');
     }
   }
 

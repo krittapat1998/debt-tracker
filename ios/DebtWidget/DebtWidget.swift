@@ -77,7 +77,10 @@ struct DebtWidgetEntryView: View {
     let entry: DebtEntry
 
     private var detail: String {
-        [entry.nextDueDate, relativeDays(entry.nextDueIso), entry.nextDueAmount]
+        let countdown = relativeDays(entry.nextDueIso)
+        // A small widget only fits one short line: the countdown beats the date.
+        let when = family == .systemSmall && !countdown.isEmpty ? [countdown] : [entry.nextDueDate, countdown]
+        return (when + [entry.nextDueAmount])
             .filter { !$0.isEmpty }
             .joined(separator: " · ")
     }
@@ -112,7 +115,7 @@ struct DebtWidgetEntryView: View {
                 Text(detail)
                     .font(.caption2)
                     .foregroundColor(.white.opacity(0.9))
-                    .lineLimit(family == .systemSmall ? 2 : 1)
+                    .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
             Spacer(minLength: 0)
