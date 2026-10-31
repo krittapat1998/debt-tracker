@@ -2,6 +2,7 @@ import '../../domain/finance/portfolio.dart';
 import '../../domain/models/account.dart';
 import '../../domain/models/enums.dart';
 import '../../domain/models/payment.dart';
+import '../../domain/models/spending.dart';
 import '../services/ledger_service.dart';
 import 'statement_source_parser.dart';
 
@@ -108,7 +109,19 @@ class StatementImportService {
           createdAt: DateTime.now(),
         ));
       case StatementEventKind.spending:
-        if (d.creditLineId != null) await ledger.addSpending(d.creditLineId!, d.amount);
+        if (d.creditLineId != null) {
+          await ledger.recordSpending(Spending(
+            id: newId(),
+            accountId: d.accountId,
+            creditLineId: d.creditLineId,
+            date: d.date,
+            amount: d.amount,
+            source: d.event.message.source == StatementSourceType.email
+                ? PaymentSource.email
+                : PaymentSource.sms,
+            createdAt: DateTime.now(),
+          ));
+        }
     }
   }
 }

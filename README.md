@@ -20,6 +20,7 @@ flutter test           # unit test สูตรคำนวณ, SMS parser, ฐ�
 | แดชบอร์ด: หนี้รวม, ต้องจ่ายเดือนนี้ (ขั้นต่ำ + ค่าผ่อน), ดอกโดยประมาณ, เรียงดอกสูง→ต่ำ (avalanche) + ไฮไลต์ดอกแพงสุด | `lib/ui/screens/dashboard_screen.dart` |
 | รายละเอียดบัตร: วงเงินย่อย, ยอดเรียกเก็บ, รายการผ่อน (งวดเหลือ, ปิดได้เร็วสุด/lock-in, ยอดปิดรวมค่าปรับ), ประวัติจ่าย | `account_detail_screen.dart`, `schedule_screen.dart` |
 | บันทึกการจ่ายแบบเร็ว พร้อมพรีวิวผลกระทบ | `payment_form_screen.dart` |
+| บันทึกยอดใช้จ่าย (ซื้อของ) พร้อมรายละเอียด บวกเข้ายอดคงค้างของวงเงินย่อย ลบแล้วหักคืน | `account_detail_screen.dart`, `lib/domain/models/spending.dart` |
 | คำนวณโปะ: ลดค่าผ่อน vs ผ่อนเท่าเดิมปิดเร็วขึ้น | `calculator_screen.dart`, `lib/domain/finance/prepayment.dart` |
 | แจ้งเตือนก่อนครบกำหนด / วันตัดรอบ / งวดสินเชื่อ | `lib/platform/notification_service.dart` |
 | Export JSON (เข้ารหัส AES-256-GCM ได้) / CSV, กู้คืน | `lib/data/backup/backup_service.dart` |

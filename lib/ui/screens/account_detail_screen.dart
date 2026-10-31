@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/formatters.dart';
+import '../../data/services/ledger_service.dart';
 import '../../domain/finance/installment_engine.dart';
 import '../../domain/finance/portfolio.dart';
 import '../../domain/models/credit_line.dart';
 import '../../domain/models/enums.dart';
 import '../../domain/models/payment.dart';
+import '../../domain/models/spending.dart';
 import '../providers.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -80,6 +82,7 @@ class AccountDetailScreen extends ConsumerWidget {
               _StatementCard(a: a),
               SectionHeader('วงเงินย่อย (${a.lines.length})'),
               for (final l in a.lines) _LineTile(a: a, line: l),
+              if (a.spendings.isNotEmpty) _SpendingSection(a: a),
               SectionHeader(
                 'รายการผ่อน',
                 trailing: TextButton.icon(
@@ -303,44 +306,149 @@ class _LineTile extends ConsumerWidget {
   /// Adds one purchase on top of the balance, so the user doesn't have to
   /// work out the new total like [_editBalance] needs.
   Future<void> _addSpending(BuildContext context, WidgetRef ref) async {
-    final controller = TextEditingController();
+    final amountCtl = TextEditingController();
+    final noteCtl = TextEditingController();
     final formKey = GlobalKey<FormState>();
-    final amount = await showDialog<double>(
+    var date = DateTime.now();
+    final saved = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('เพิ่มยอดใช้จ่าย: ${line.name}'),
-        content: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AmountField(controller: controller, label: 'ยอดที่ใช้', required: true, allowZero: false, autofocus: true),
-              const SizedBox(height: 8),
-              Text(
-                'บวกเพิ่มจากยอดคงค้างตอนนี้ ${fmtMoney(line.balance)} '
-                '— ถ้าแบ่งจ่ายเป็นงวด ให้ใช้ "เพิ่มรายการผ่อน" แทน',
-                style: const TextStyle(fontSize: 12),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: Text('เพิ่มยอดใช้จ่าย: ${line.name}'),
+          content: SingleChildScrollView(
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AmountField(controller: amountCtl, label: 'ยอดที่ใช้', required: true, allowZero: false, autofocus: true),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: noteCtl,
+                    decoration: const InputDecoration(labelText: 'รายละเอียด', hintText: 'จ่ายค่าอะไร เช่น ค่าอาหาร'),
+                  ),
+                  const SizedBox(height: 12),
+                  DateField(value: date, label: 'วันที่ใช้จ่าย', onChanged: (d) => setState(() => date = d ?? date)),
+                  const SizedBox(height: 8),
+                  Text(
+                    'บวกเพิ่มจากยอดคงค้างตอนนี้ ${fmtMoney(line.balance)} '
+                    '— ถ้าแบ่งจ่ายเป็นงวด ให้ใช้ "เพิ่มรายการผ่อน" แทน',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ยกเลิก')),
+            FilledButton(
+              onPressed: () {
+                if (formKey.currentState!.validate()) Navigator.pop(ctx, true);
+              },
+              child: const Text('บันทึก'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ยกเลิก')),
-          FilledButton(
-            onPressed: () {
-              if (formKey.currentState!.validate()) Navigator.pop(ctx, parseAmount(controller.text));
-            },
-            child: const Text('บันทึก'),
-          ),
-        ],
       ),
     );
-    if (amount == null) return;
-    await ref.read(ledgerProvider).addSpending(line.id, amount);
+    if (saved != true) return;
+    final amount = parseAmount(amountCtl.text)!;
+    final note = noteCtl.text.trim();
+    await ref.read(ledgerProvider).recordSpending(Spending(
+          id: newId(),
+          accountId: line.accountId,
+          creditLineId: line.id,
+          date: date,
+          amount: amount,
+          note: note.isEmpty ? null : note,
+          createdAt: DateTime.now(),
+        ));
     ref.refreshData();
     if (context.mounted) {
       showSnack(context, 'เพิ่มยอดใช้จ่าย ${fmtMoney(amount)} แล้ว · ยอดคงค้าง ${fmtMoney(line.balance + amount)}');
     }
+  }
+}
+
+/// Spending history of one account; long lists start collapsed.
+class _SpendingSection extends StatefulWidget {
+  const _SpendingSection({required this.a});
+  final AccountSummary a;
+
+  @override
+  State<_SpendingSection> createState() => _SpendingSectionState();
+}
+
+class _SpendingSectionState extends State<_SpendingSection> {
+  static const _collapsedCount = 3;
+  var _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final all = widget.a.spendings;
+    final shown = _expanded ? all : all.take(_collapsedCount);
+    return Column(
+      children: [
+        SectionHeader(
+          'ประวัติการใช้จ่าย (${all.length})',
+          trailing: all.length <= _collapsedCount
+              ? null
+              : TextButton(
+                  onPressed: () => setState(() => _expanded = !_expanded),
+                  child: Text(_expanded ? 'ย่อ' : 'ดูทั้งหมด'),
+                ),
+        ),
+        for (final s in shown) SpendingTile(spending: s, summary: widget.a),
+      ],
+    );
+  }
+}
+
+class SpendingTile extends ConsumerWidget {
+  const SpendingTile({super.key, required this.spending, required this.summary});
+  final Spending spending;
+  final AccountSummary summary;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = spending;
+    String? lineName;
+    if (summary.lines.length > 1) {
+      for (final l in summary.lines) {
+        if (l.id == s.creditLineId) lineName = l.name;
+      }
+    }
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+        child: const Icon(Icons.shopping_bag_outlined, size: 20),
+      ),
+      title: Text('${fmtMoney(s.amount)} · ${s.note ?? 'ใช้จ่าย'}'),
+      subtitle: Text([
+        fmtDate(s.date),
+        ?lineName,
+        if (s.source != PaymentSource.manual) 'จาก ${s.source.label}',
+      ].join(' · ')),
+      trailing: IconButton(
+        icon: const Icon(Icons.delete_outline),
+        tooltip: 'ลบ',
+        onPressed: () => _delete(context, ref),
+      ),
+      onLongPress: () => _delete(context, ref),
+    );
+  }
+
+  Future<void> _delete(BuildContext context, WidgetRef ref) async {
+    final ok = await confirmDialog(
+      context,
+      title: 'ลบรายการใช้จ่ายนี้?',
+      message: '${fmtMoney(spending.amount)} เมื่อ ${fmtDate(spending.date)} — ยอดนี้จะถูกหักออกจากยอดคงค้าง',
+      confirmLabel: 'ลบ',
+      destructive: true,
+    );
+    if (!ok) return;
+    await ref.read(ledgerProvider).deleteSpending(spending.id);
+    ref.refreshData();
   }
 }
 

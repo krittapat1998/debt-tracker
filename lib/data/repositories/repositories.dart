@@ -2,6 +2,7 @@ import '../../domain/models/account.dart';
 import '../../domain/models/credit_line.dart';
 import '../../domain/models/installment_plan.dart';
 import '../../domain/models/payment.dart';
+import '../../domain/models/spending.dart';
 
 /// Storage-agnostic contracts. The UI and services only depend on these, so
 /// a different store (or a synced one) can be swapped in later.
@@ -33,6 +34,13 @@ abstract interface class PaymentRepository {
   Future<List<Payment>> getAll();
   Future<Payment?> getById(String id);
   Future<void> insert(Payment payment);
+  Future<void> delete(String id);
+}
+
+abstract interface class SpendingRepository {
+  Future<List<Spending>> getAll();
+  Future<Spending?> getById(String id);
+  Future<void> insert(Spending spending);
   Future<void> delete(String id);
 }
 

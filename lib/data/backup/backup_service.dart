@@ -128,6 +128,9 @@ class BackupService {
     final planNames = {
       for (final p in dump['installment_plans']!) p['id']: p['name'],
     };
+    final lineNames = {
+      for (final l in dump['credit_lines']!) l['id']: l['name'],
+    };
     final out = <String, String>{};
     for (final t in ['accounts', 'credit_lines', 'installment_plans']) {
       out['$t.csv'] = _toCsv(dump[t]!);
@@ -143,6 +146,18 @@ class BackupService {
           'source': PaymentSource.fromName(p['source'] as String?).label,
           'note': p['note'] ?? '',
           'date_th': fmtDate(DateTime.parse(p['date'] as String)),
+        },
+    ]);
+    out['spendings.csv'] = _toCsv([
+      for (final s in dump['spendings']!)
+        {
+          'date': s['date'],
+          'account': names[s['account_id']] ?? '',
+          'credit_line': lineNames[s['credit_line_id']] ?? '',
+          'amount': s['amount'],
+          'note': s['note'] ?? '',
+          'source': PaymentSource.fromName(s['source'] as String?).label,
+          'date_th': fmtDate(DateTime.parse(s['date'] as String)),
         },
     ]);
     return out;

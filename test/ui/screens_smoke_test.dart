@@ -11,6 +11,7 @@ import 'package:debt_tracker/domain/models/credit_line.dart';
 import 'package:debt_tracker/domain/models/enums.dart';
 import 'package:debt_tracker/domain/models/installment_plan.dart';
 import 'package:debt_tracker/domain/models/payment.dart';
+import 'package:debt_tracker/domain/models/spending.dart';
 import 'package:debt_tracker/ui/providers.dart';
 import 'package:debt_tracker/ui/screens/account_detail_screen.dart';
 import 'package:debt_tracker/ui/screens/account_form_screen.dart';
@@ -40,9 +41,9 @@ class _MemorySettings implements SettingsRepository {
 
 /// Records spending instead of writing to a database.
 class _RecordingLedger implements LedgerService {
-  final spending = <(String, double)>[];
+  final spending = <Spending>[];
   @override
-  Future<void> addSpending(String lineId, double amount) async => spending.add((lineId, amount));
+  Future<void> recordSpending(Spending s) async => spending.add(s);
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -50,7 +51,7 @@ class _RecordingLedger implements LedgerService {
 /// Sample data shaped like real use: a card with a 0% installment billed
 /// on the statement, a card with two sub-limits and a locked-in loan, and a
 /// flat-rate cash-card loan with a prepayment.
-PortfolioSummary samplePortfolio() {
+PortfolioSummary samplePortfolio({List<Spending> spendings = const []}) {
   final today = dateOnly(DateTime.now());
   final created = today.subtract(const Duration(days: 120));
   DateTime ago(int days) => today.subtract(Duration(days: days));
@@ -84,6 +85,7 @@ PortfolioSummary samplePortfolio() {
       Payment(id: 'x3', accountId: 'a3', planId: 'p3', date: ago(10), amount: 5000, type: PaymentType.extra,
           prepaymentMode: PrepaymentMode.reduceTerm, note: 'โปะจากเงินเหลือ', source: PaymentSource.sms, createdAt: ago(10)),
     ],
+    spendings: spendings,
     today: today,
   );
 }
@@ -166,11 +168,36 @@ void main() {
     expect(find.text('กรุณากรอก'), findsOneWidget);
     expect(ledger.spending, isEmpty);
 
-    await tester.enterText(find.byType(TextFormField), '1,200');
+    await tester.enterText(find.widgetWithText(TextFormField, 'ยอดที่ใช้'), '1,200');
+    await tester.enterText(find.widgetWithText(TextFormField, 'รายละเอียด'), '  ค่าอาหาร ');
     await tester.tap(find.text('บันทึก'));
     await settle(tester);
-    expect(ledger.spending, [('l1', 1200.0)]);
+    final s = ledger.spending.single;
+    expect((s.accountId, s.creditLineId, s.amount, s.note), ('a1', 'l1', 1200.0, 'ค่าอาหาร'));
+    expect(dateOnly(s.date), dateOnly(DateTime.now()));
     expect(find.text('เพิ่มยอดใช้จ่าย ฿1,200.00 แล้ว · ยอดคงค้าง ฿13,200.00'), findsOneWidget);
+  });
+
+  testWidgets('spending history shows the latest three, with notes, and expands', (tester) async {
+    final today = dateOnly(DateTime.now());
+    await pump(
+      tester,
+      const AccountDetailScreen(accountId: 'a2'),
+      data: samplePortfolio(spendings: [
+        for (var i = 1; i <= 4; i++)
+          Spending(id: 's$i', accountId: 'a2', creditLineId: 'l2', date: today.subtract(Duration(days: i)),
+              amount: 100.0 * i, note: i == 1 ? 'ค่าอาหาร' : null, createdAt: today),
+      ]),
+    );
+    await tester.scrollUntilVisible(find.text('ประวัติการใช้จ่าย (4)'), 300, scrollable: find.byType(Scrollable).first);
+    await settle(tester);
+    // Newest first; the account has two sub-limits, so each row names its own.
+    expect(find.text('฿100.00 · ค่าอาหาร'), findsOneWidget);
+    expect(find.textContaining('· วงเงินบัตรเครดิต'), findsNWidgets(3));
+    expect(find.text('฿400.00 · ใช้จ่าย'), findsNothing);
+    await tester.tap(find.text('ดูทั้งหมด'));
+    await settle(tester);
+    expect(find.text('฿400.00 · ใช้จ่าย'), findsOneWidget);
   });
 
   testWidgets('account form: new and edit', (tester) async {

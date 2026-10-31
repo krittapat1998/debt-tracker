@@ -6,6 +6,7 @@ import '../../domain/models/account.dart';
 import '../../domain/models/credit_line.dart';
 import '../../domain/models/installment_plan.dart';
 import '../../domain/models/payment.dart';
+import '../../domain/models/spending.dart';
 import '../repositories/repositories.dart';
 
 const _uuid = Uuid();
@@ -20,12 +21,14 @@ class LedgerService {
     required this.lines,
     required this.plans,
     required this.payments,
+    required this.spendings,
   });
 
   final AccountRepository accounts;
   final CreditLineRepository lines;
   final InstallmentRepository plans;
   final PaymentRepository payments;
+  final SpendingRepository spendings;
 
   Future<void> saveAccount(Account account, List<CreditLine> creditLines) =>
       accounts.save(account, creditLines);
@@ -89,10 +92,25 @@ class LedgerService {
     await lines.update(line.copyWith(balance: math.max(0, balance)));
   }
 
-  /// New spending on a card (e.g. from a "ใช้จ่ายบัตร" SMS).
-  Future<void> addSpending(String lineId, double amount) async {
-    final line = await lines.getById(lineId);
-    if (line == null) return;
-    await lines.update(line.copyWith(balance: line.balance + amount));
+  /// New spending on a card (typed in, or from a "ใช้จ่ายบัตร" SMS): kept
+  /// in the history and added to the sub-limit balance.
+  Future<void> recordSpending(Spending spending) async {
+    if (spending.creditLineId != null) {
+      final line = await lines.getById(spending.creditLineId!);
+      if (line != null) await lines.update(line.copyWith(balance: line.balance + spending.amount));
+    }
+    await spendings.insert(spending);
+  }
+
+  /// Deletes spending and takes it back off the balance (never below zero,
+  /// in case the balance was corrected by hand since).
+  Future<void> deleteSpending(String id) async {
+    final s = await spendings.getById(id);
+    if (s == null) return;
+    if (s.creditLineId != null) {
+      final line = await lines.getById(s.creditLineId!);
+      if (line != null) await lines.update(line.copyWith(balance: math.max(0, line.balance - s.amount)));
+    }
+    await spendings.delete(id);
   }
 }

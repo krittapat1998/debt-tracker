@@ -7,10 +7,12 @@ class AppDatabase {
 
   final Database db;
 
-  static const _version = 1;
+  /// 2: spendings table.
+  static const _version = 2;
   static const fileName = 'debt_tracker.db';
 
-  static const tables = ['accounts', 'credit_lines', 'installment_plans', 'payments', 'settings'];
+  /// Parents before children (backup restore inserts in this order).
+  static const tables = ['accounts', 'credit_lines', 'installment_plans', 'payments', 'spendings', 'settings'];
 
   static Future<AppDatabase> open({DatabaseFactory? factory, String? path}) async {
     final f = factory ?? databaseFactory;
@@ -21,6 +23,11 @@ class AppDatabase {
         version: _version,
         onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
         onCreate: (db, _) => _create(db),
+        onUpgrade: (db, oldVersion, _) async {
+          final batch = db.batch();
+          if (oldVersion < 2) _createSpendings(batch);
+          await batch.commit(noResult: true);
+        },
       ),
     );
     return AppDatabase._(db);
@@ -94,12 +101,28 @@ class AppDatabase {
       )''');
     batch.execute('CREATE INDEX idx_payments_account ON payments(account_id, date)');
     batch.execute('CREATE INDEX idx_payments_plan ON payments(plan_id)');
+    _createSpendings(batch);
     batch.execute('''
       CREATE TABLE settings (
         key TEXT PRIMARY KEY,
         value TEXT
       )''');
     await batch.commit(noResult: true);
+  }
+
+  static void _createSpendings(Batch batch) {
+    batch.execute('''
+      CREATE TABLE spendings (
+        id TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+        credit_line_id TEXT REFERENCES credit_lines(id) ON DELETE SET NULL,
+        date TEXT NOT NULL,
+        amount REAL NOT NULL,
+        note TEXT,
+        source TEXT NOT NULL DEFAULT 'manual',
+        created_at TEXT NOT NULL
+      )''');
+    batch.execute('CREATE INDEX idx_spendings_account ON spendings(account_id, date)');
   }
 
   Future<void> close() => db.close();

@@ -30,6 +30,8 @@ final installmentRepositoryProvider =
     Provider<InstallmentRepository>((ref) => SqliteInstallmentRepository(ref.watch(databaseProvider)));
 final paymentRepositoryProvider =
     Provider<PaymentRepository>((ref) => SqlitePaymentRepository(ref.watch(databaseProvider)));
+final spendingRepositoryProvider =
+    Provider<SpendingRepository>((ref) => SqliteSpendingRepository(ref.watch(databaseProvider)));
 final settingsRepositoryProvider =
     Provider<SettingsRepository>((ref) => SqliteSettingsRepository(ref.watch(databaseProvider)));
 
@@ -41,6 +43,7 @@ final ledgerProvider = Provider<LedgerService>((ref) => LedgerService(
       lines: ref.watch(creditLineRepositoryProvider),
       plans: ref.watch(installmentRepositoryProvider),
       payments: ref.watch(paymentRepositoryProvider),
+      spendings: ref.watch(spendingRepositoryProvider),
     ));
 
 final backupServiceProvider = Provider<BackupService>((ref) => BackupService(ref.watch(databaseProvider)));
@@ -55,11 +58,13 @@ final portfolioProvider = FutureProvider<PortfolioSummary>((ref) async {
   final lines = await ref.watch(creditLineRepositoryProvider).getAll();
   final plans = await ref.watch(installmentRepositoryProvider).getAll();
   final payments = await ref.watch(paymentRepositoryProvider).getAll();
+  final spendings = await ref.watch(spendingRepositoryProvider).getAll();
   return PortfolioSummary.build(
     accounts: accounts,
     lines: lines,
     plans: plans,
     payments: payments,
+    spendings: spendings,
     today: DateTime.now(),
   );
 });
