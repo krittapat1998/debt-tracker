@@ -92,6 +92,12 @@ assets/sms_patterns.json  regex ของแต่ละธนาคาร (แ�
   ก่อนรันบนเครื่องจริง เปิด `ios/Runner.xcworkspace` → Signing & Capabilities ของทั้ง **Runner** และ **DebtWidgetExtension**
   → ตรวจว่า Team ถูกต้องและ App Groups มี `group.com.krittapat.debtTracker` (Xcode จะลงทะเบียนให้)
 
+## ไอคอนแอพ
+
+- `assets/icon/app_icon.png`: สี่เหลี่ยมเต็มกรอบ 1024px ไม่มีมุมโค้งและไม่มีพื้นโปร่งใส (iOS/Android ตัดมุมเอง)
+- Android ใช้ adaptive icon: `assets/icon/adaptive_background.png` ย่อภาพให้อยู่ในวงกลมปลอดภัยของ launcher
+- แก้รูปแล้วสร้างไอคอนทุกขนาดใหม่ด้วย `dart run flutter_launcher_icons`
+
 ## ความเป็นส่วนตัว / สำรองข้อมูล
 
 - ไม่มี server ข้อมูลอยู่ใน SQLite ของแอพ
