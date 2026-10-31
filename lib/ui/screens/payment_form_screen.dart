@@ -1,0 +1,371 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/date_utils.dart';
+import '../../core/formatters.dart';
+import '../../data/services/ledger_service.dart';
+import '../../domain/finance/installment_engine.dart';
+import '../../domain/finance/portfolio.dart';
+import '../../domain/finance/prepayment.dart';
+import '../../domain/models/credit_line.dart';
+import '../../domain/models/enums.dart';
+import '../../domain/models/payment.dart';
+import '../providers.dart';
+import '../theme.dart';
+import '../widgets/common.dart';
+import '../widgets/form_fields.dart';
+
+/// Quick payment entry: date / account / target / amount / type.
+class PaymentFormScreen extends ConsumerStatefulWidget {
+  const PaymentFormScreen({
+    super.key,
+    this.accountId,
+    this.planId,
+    this.type,
+    this.amount,
+    this.prepaymentMode,
+  });
+
+  final String? accountId;
+  final String? planId;
+  final PaymentType? type;
+  final double? amount;
+  final PrepaymentMode? prepaymentMode;
+
+  @override
+  ConsumerState<PaymentFormScreen> createState() => _PaymentFormScreenState();
+}
+
+class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
+  final _form = GlobalKey<FormState>();
+  final _amount = TextEditingController();
+  final _note = TextEditingController();
+  DateTime _date = dateOnly(DateTime.now());
+  String? _accountId;
+
+  /// `line:{id}` or `plan:{id}`.
+  String? _target;
+  PaymentType _type = PaymentType.minimum;
+  PrepaymentMode _mode = PrepaymentMode.reduceTerm;
+  bool _amountTouched = false;
+  bool _initialized = false;
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _amount.dispose();
+    _note.dispose();
+    super.dispose();
+  }
+
+  void _init(PortfolioSummary s) {
+    if (_initialized) return;
+    _initialized = true;
+    final a = (widget.accountId != null ? s.byId(widget.accountId!) : null) ?? s.nextDue ?? s.accounts.first;
+    _accountId = a.account.id;
+    _target = widget.planId != null ? 'plan:${widget.planId}' : _defaultTarget(a);
+    _mode = widget.prepaymentMode ?? PrepaymentMode.reduceTerm;
+    _type = widget.type ?? _allowedTypes(a).first;
+    if (widget.amount != null) {
+      _amount.text = amountToField(widget.amount);
+      _amountTouched = true;
+    } else {
+      _suggestAmount(a);
+    }
+  }
+
+  String? _defaultTarget(AccountSummary a) {
+    if (a.lines.isNotEmpty) return 'line:${a.lines.first.id}';
+    final plans = a.activePlans;
+    return plans.isEmpty ? null : 'plan:${plans.first.plan.id}';
+  }
+
+  InstallmentState? _plan(AccountSummary a) {
+    if (_target == null || !_target!.startsWith('plan:')) return null;
+    final id = _target!.substring(5);
+    for (final p in a.plans) {
+      if (p.plan.id == id) return p;
+    }
+    return null;
+  }
+
+  CreditLine? _line(AccountSummary a) {
+    if (_target == null || !_target!.startsWith('line:')) return null;
+    final id = _target!.substring(5);
+    for (final l in a.lines) {
+      if (l.id == id) return l;
+    }
+    return null;
+  }
+
+  List<PaymentType> _allowedTypes(AccountSummary a) {
+    final plan = _plan(a);
+    if (plan == null) {
+      return [PaymentType.minimum, PaymentType.full, PaymentType.extra, PaymentType.other];
+    }
+    return [
+      if (!plan.plan.includedInStatement) PaymentType.installment,
+      PaymentType.extra,
+      PaymentType.full,
+    ];
+  }
+
+  void _suggestAmount(AccountSummary a) {
+    if (_amountTouched) return;
+    final plan = _plan(a);
+    final line = _line(a);
+    double? v;
+    switch (_type) {
+      case PaymentType.minimum:
+        v = a.minimumOutstanding > 0 ? a.minimumOutstanding : null;
+      case PaymentType.full:
+        v = plan != null
+            ? plan.payoffAmount
+            : (a.statementOutstanding > 0 ? a.statementOutstanding : line?.balance);
+      case PaymentType.installment:
+        v = plan?.nextRow?.payment;
+      case PaymentType.extra:
+      case PaymentType.other:
+        v = null;
+    }
+    _amount.text = v == null || v <= 0 ? '' : amountToField(double.parse(v.toStringAsFixed(2)));
+  }
+
+  Future<void> _save(AccountSummary a) async {
+    if (!_form.currentState!.validate()) return;
+    setState(() => _saving = true);
+    final plan = _plan(a);
+    final line = _line(a);
+    await ref.read(ledgerProvider).recordPayment(Payment(
+          id: newId(),
+          accountId: a.account.id,
+          creditLineId: line?.id ?? plan?.plan.creditLineId,
+          planId: plan?.plan.id,
+          date: _date,
+          amount: parseAmount(_amount.text)!,
+          type: _type,
+          prepaymentMode: _type == PaymentType.extra && plan != null ? _mode : null,
+          note: _note.text.trim().isEmpty ? null : _note.text.trim(),
+          createdAt: DateTime.now(),
+        ));
+    ref.refreshData();
+    if (!mounted) return;
+    Navigator.pop(context);
+    showSnack(context, 'บันทึกการจ่าย ${fmtMoney(parseAmount(_amount.text)!)} แล้ว');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final portfolio = ref.watch(portfolioProvider);
+    return Scaffold(
+      appBar: AppBar(title: const Text('บันทึกการจ่ายเงิน')),
+      body: AsyncBody(
+        value: portfolio,
+        builder: (s) {
+          if (s.isEmpty) return const EmptyState(icon: Icons.credit_card_off, title: 'ยังไม่มีบัตร/สินเชื่อ');
+          _init(s);
+          final a = s.byId(_accountId!) ?? s.accounts.first;
+          final types = _allowedTypes(a);
+          if (!types.contains(_type)) _type = types.first;
+          final plan = _plan(a);
+          final line = _line(a);
+          final amount = parseAmount(_amount.text) ?? 0;
+          return Form(
+            key: _form,
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                DateField(
+                  value: _date,
+                  label: 'วันที่จ่าย',
+                  onChanged: (d) => setState(() => _date = d ?? _date),
+                ),
+                formGap,
+                DropdownButtonFormField<String>(
+                  initialValue: a.account.id,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'จ่ายให้บัตร/สินเชื่อ'),
+                  items: [
+                    for (final x in s.accounts) DropdownMenuItem(value: x.account.id, child: Text(x.account.name)),
+                  ],
+                  onChanged: (v) => setState(() {
+                    _accountId = v;
+                    final next = s.byId(v!)!;
+                    _target = _defaultTarget(next);
+                    _type = _allowedTypes(next).first;
+                    _amountTouched = false;
+                    _suggestAmount(next);
+                  }),
+                ),
+                formGap,
+                DropdownButtonFormField<String?>(
+                  key: ValueKey('target-${a.account.id}'),
+                  initialValue: _target,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'จ่ายเข้า'),
+                  items: [
+                    for (final l in a.lines)
+                      DropdownMenuItem(value: 'line:${l.id}', child: Text('${l.name} (คงค้าง ${fmtMoney(l.balance)})')),
+                    for (final p in a.activePlans)
+                      DropdownMenuItem(value: 'plan:${p.plan.id}', child: Text('ผ่อน: ${p.plan.name}')),
+                  ],
+                  onChanged: (v) => setState(() {
+                    _target = v;
+                    _type = _allowedTypes(a).first;
+                    _amountTouched = false;
+                    _suggestAmount(a);
+                  }),
+                ),
+                formGap,
+                Text('ประเภท', style: Theme.of(context).textTheme.labelLarge),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  children: [
+                    for (final t in types)
+                      ChoiceChip(
+                        label: Text(t.label),
+                        selected: _type == t,
+                        onSelected: (_) => setState(() {
+                          _type = t;
+                          _amountTouched = false;
+                          _suggestAmount(a);
+                        }),
+                      ),
+                  ],
+                ),
+                if (plan != null && plan.plan.includedInStatement)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      'ค่างวดของรายการนี้รวมอยู่ในยอดบัตรแล้ว — จ่ายค่างวดปกติให้บันทึกที่วงเงินบัตรแทน',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                formGap,
+                AmountField(
+                  controller: _amount,
+                  label: 'จำนวนเงิน',
+                  required: true,
+                  allowZero: false,
+                  onChanged: (_) => setState(() => _amountTouched = true),
+                ),
+                if (_type == PaymentType.extra && plan != null) ...[
+                  formGap,
+                  Text('หลังโปะ ต้องการให้', style: Theme.of(context).textTheme.labelLarge),
+                  const SizedBox(height: 6),
+                  SegmentedButton<PrepaymentMode>(
+                    segments: [
+                      for (final m in PrepaymentMode.values) ButtonSegment(value: m, label: Text(m.label)),
+                    ],
+                    selected: {_mode},
+                    onSelectionChanged: (v) => setState(() => _mode = v.first),
+                  ),
+                ],
+                formGap,
+                _ImpactPreview(account: a, plan: plan, line: line, type: _type, amount: amount, mode: _mode, date: _date),
+                formGap,
+                TextFormField(
+                  controller: _note,
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                    labelText: 'โน้ต',
+                    hintText: 'เช่น โปะจากเงินเหลือก้อน UOB Express',
+                  ),
+                ),
+                const SizedBox(height: 24),
+                FilledButton.icon(
+                  onPressed: _saving ? null : () => _save(a),
+                  icon: const Icon(Icons.check),
+                  label: const Text('บันทึก'),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _ImpactPreview extends StatelessWidget {
+  const _ImpactPreview({
+    required this.account,
+    required this.plan,
+    required this.line,
+    required this.type,
+    required this.amount,
+    required this.mode,
+    required this.date,
+  });
+
+  final AccountSummary account;
+  final InstallmentState? plan;
+  final CreditLine? line;
+  final PaymentType type;
+  final double amount;
+  final PrepaymentMode mode;
+  final DateTime date;
+
+  @override
+  Widget build(BuildContext context) {
+    if (amount <= 0) return const SizedBox.shrink();
+    final cs = Theme.of(context).colorScheme;
+    final rows = <Widget>[];
+    final p = plan;
+    if (p != null) {
+      if (type == PaymentType.extra || type == PaymentType.full) {
+        if (p.isLockedOn(date)) {
+          rows.add(Text('ยังอยู่ในช่วง lock-in ถึง ${fmtDate(p.earliestClosureDate!)} — ตรวจสอบเงื่อนไขกับธนาคารก่อนโปะ',
+              style: TextStyle(color: cs.warning)));
+        }
+        final c = PrepaymentComparison.compute(p.current, amount);
+        final o = mode == PrepaymentMode.reduceTerm || type == PaymentType.full ? c.reduceTerm : c.reducePayment;
+        rows.addAll([
+          InfoRow('เงินต้นคงเหลือ', '${fmtMoney(p.remainingPrincipal)} → ${fmtMoney(o.after.balance)}'),
+          if (!o.after.isClosed) ...[
+            InfoRow('ค่าผ่อน/เดือน', '${fmtMoney(p.currentPayment)} → ${fmtMoney(o.newPayment)}'),
+            InfoRow('งวดคงเหลือ', '${p.remainingInstallments} → ${o.months}'),
+          ],
+          InfoRow('ประหยัดดอกเบี้ย', fmtMoney(o.interestSaved), valueColor: cs.positive, bold: true),
+        ]);
+      } else {
+        final next = p.nextRow;
+        if (next != null) {
+          rows.addAll([
+            InfoRow('งวดที่', '${next.number}'),
+            InfoRow('ตัดดอกเบี้ย', fmtMoney(next.interest)),
+            InfoRow('ตัดเงินต้น', fmtMoney(amount - next.interest)),
+          ]);
+        }
+      }
+    } else if (line != null) {
+      final after = (line!.balance - amount).clamp(0.0, double.infinity);
+      rows.add(InfoRow('ยอดคงค้าง ${line!.name}', '${fmtMoney(line!.balance)} → ${fmtMoney(after)}'));
+      if (account.account.minimumPayment > 0) {
+        rows.add(InfoRow('ขั้นต่ำคงเหลือหลังจ่าย',
+            fmtMoney((account.minimumOutstanding - amount).clamp(0.0, double.infinity))));
+      }
+      if (line!.annualRate > 0) {
+        rows.add(InfoRow('ดอกเบี้ยที่ลดลงต่อเดือน (ประมาณ)',
+            fmtMoney((line!.balance - after) * line!.annualRate / 1200), valueColor: cs.positive));
+      }
+    }
+    if (rows.isEmpty) return const SizedBox.shrink();
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('ผลหลังบันทึก', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 6),
+            ...rows,
+          ],
+        ),
+      ),
+    );
+  }
+}

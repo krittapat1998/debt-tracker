@@ -1,0 +1,215 @@
+{
+  "_comment": "SMS parsing rules. Every field is a regex (or list tried in order); capture group 1 is the value. Macros: {AMOUNT} any number, {MONEY} number with comma or 2 decimals, {DATE} dd/mm/yy(yy) or '25 ต.ค. 69', {CARD} 4 digits. Sender ids are examples: check the real sender names on your phone and adjust.",
+  "exclude": [
+    "\\bOTP\\b|รหัส\\s*OTP|รหัสผ่าน|รหัสยืนยัน|verification code|one[- ]time password"
+  ],
+  "banks": [
+    {
+      "id": "ktc",
+      "name": "KTC",
+      "senderIds": [
+        "KTC"
+      ],
+      "keywords": [
+        "KTC",
+        "เคทีซี"
+      ]
+    },
+    {
+      "id": "kbank",
+      "name": "กสิกรไทย (KBank)",
+      "senderIds": [
+        "KBank",
+        "K-Bank",
+        "KBANK-CARD"
+      ],
+      "keywords": [
+        "KBank",
+        "กสิกร"
+      ]
+    },
+    {
+      "id": "scb",
+      "name": "ไทยพาณิชย์ (SCB)",
+      "senderIds": [
+        "SCB",
+        "SCBCard",
+        "SCB_CARD"
+      ],
+      "keywords": [
+        "SCB",
+        "ไทยพาณิชย์"
+      ]
+    },
+    {
+      "id": "krungsri",
+      "name": "กรุงศรี",
+      "senderIds": [
+        "Krungsri",
+        "KrungsriCC",
+        "KRUNGSRI"
+      ],
+      "keywords": [
+        "Krungsri",
+        "กรุงศรี"
+      ]
+    },
+    {
+      "id": "firstchoice",
+      "name": "กรุงศรี เฟิร์สช้อยส์",
+      "senderIds": [
+        "FirstChoice",
+        "1stChoice"
+      ],
+      "keywords": [
+        "First Choice",
+        "FirstChoice",
+        "เฟิร์สช้อยส์"
+      ]
+    },
+    {
+      "id": "uob",
+      "name": "UOB",
+      "senderIds": [
+        "UOB",
+        "UOBThai",
+        "UOBTH"
+      ],
+      "keywords": [
+        "UOB",
+        "ยูโอบี"
+      ]
+    },
+    {
+      "id": "bbl",
+      "name": "กรุงเทพ (Bualuang)",
+      "senderIds": [
+        "Bualuang",
+        "BBL",
+        "BangkokBank"
+      ],
+      "keywords": [
+        "Bualuang",
+        "บัวหลวง",
+        "ธ.กรุงเทพ"
+      ]
+    },
+    {
+      "id": "ttb",
+      "name": "ทีทีบี (ttb)",
+      "senderIds": [
+        "ttb",
+        "TTBbank"
+      ],
+      "keywords": [
+        "ttb",
+        "ทีทีบี"
+      ]
+    },
+    {
+      "id": "ktb",
+      "name": "กรุงไทย",
+      "senderIds": [
+        "Krungthai",
+        "KTB"
+      ],
+      "keywords": [
+        "Krungthai",
+        "กรุงไทย"
+      ]
+    },
+    {
+      "id": "aeon",
+      "name": "อิออน (AEON)",
+      "senderIds": [
+        "AEON",
+        "AEONTH"
+      ],
+      "keywords": [
+        "AEON",
+        "อิออน"
+      ]
+    },
+    {
+      "id": "cardx",
+      "name": "CardX",
+      "senderIds": [
+        "CardX"
+      ],
+      "keywords": [
+        "CardX"
+      ]
+    }
+  ],
+  "patterns": [
+    {
+      "id": "generic-statement",
+      "bankId": "*",
+      "kind": "statement",
+      "priority": 10,
+      "trigger": "ยอดเรียกเก็บ|ยอดชำระเต็ม|ยอดที่ต้องชำระ|ใบแจ้งยอด|ขั้นต่ำ|statement|minimum",
+      "amount": [
+        "(?:ยอดเรียกเก็บ(?:เงิน)?|ยอดชำระเต็ม(?:จำนวน)?|ยอดที่ต้องชำระ(?:ทั้งหมด)?|ยอดรวม|statement balance|total(?: amount)? due|new balance)[^0-9]{0,30}?{MONEY}",
+        "(?:จำนวน(?:เงิน)?|ยอด)\\s*(?:THB\\s*)?{AMOUNT}",
+        "{AMOUNT}\\s*(?:บาท|บ\\.|THB)",
+        "(?:THB|฿)\\s*{AMOUNT}"
+      ],
+      "minimum": [
+        "(?:ขั้นต่ำ|min(?:imum)?(?: payment)?(?: due)?)[^0-9]{0,25}?{AMOUNT}"
+      ],
+      "dueDate": [
+        "(?:ครบกำหนด(?:ชำระ)?|กำหนดชำระ|ชำระ(?:เงิน)?(?:ได้)?(?:ภายใน|ก่อน)(?:วันที่)?|ภายใน(?:วันที่)?|due(?: date)?(?: on)?|pay by)[^0-9]{0,15}?{DATE}"
+      ],
+      "date": [
+        "(?:รอบ(?:บัญชี|บิล)?|statement date|ณ\\s*วันที่)\\s*(?:วันที่)?\\s*{DATE}"
+      ],
+      "card": [
+        "(?:บัตร(?:เครดิต)?|card|ลงท้าย(?:ด้วย)?|ending)[^0-9]{0,20}?(\\d{4})(?![0-9,.])",
+        "[xX*•]{2,}[\\s\\-]?(\\d{4})(?![0-9,.])",
+        "(?<![A-Za-z])[xX*](\\d{4})(?![0-9,.])"
+      ]
+    },
+    {
+      "id": "generic-payment",
+      "bankId": "*",
+      "kind": "payment",
+      "priority": 20,
+      "trigger": "ได้รับ(?:การ)?ชำระ|รับชำระ|ชำระ[^.]{0,40}?(?:เรียบร้อย|สำเร็จ)|ขอบคุณ(?:ที่|สำหรับการ)ชำระ|payment (?:received|of|has been received)|received your payment|thank you for (?:your )?payment",
+      "amount": [
+        "(?:จำนวน(?:เงิน)?|ยอดเงิน|ยอดชำระ|amount|payment of)[^0-9]{0,15}?{AMOUNT}",
+        "{AMOUNT}\\s*(?:บาท|บ\\.|THB)",
+        "(?:THB|฿)\\s*{AMOUNT}",
+        "ชำระ(?:เงิน)?[^0-9]{0,15}?{MONEY}"
+      ],
+      "date": [
+        "(?:วันที่|เมื่อ|on)\\s*{DATE}"
+      ],
+      "card": [
+        "(?:บัตร(?:เครดิต)?|card|ลงท้าย(?:ด้วย)?|ending)[^0-9]{0,20}?(\\d{4})(?![0-9,.])",
+        "[xX*•]{2,}[\\s\\-]?(\\d{4})(?![0-9,.])",
+        "(?<![A-Za-z])[xX*](\\d{4})(?![0-9,.])"
+      ]
+    },
+    {
+      "id": "generic-spending",
+      "bankId": "*",
+      "kind": "spending",
+      "priority": 30,
+      "trigger": "ใช้จ่าย|ใช้บัตร|รูดบัตร|ทำรายการ(?:ใช้จ่าย|ซื้อ|ชำระสินค้า)|ชำระสินค้า|spent|purchase|spending",
+      "amount": [
+        "(?:จำนวน(?:เงิน)?|ยอด(?:เงิน)?|ใช้จ่าย|spent|amount|purchase of)[^0-9]{0,15}?{MONEY}",
+        "{AMOUNT}\\s*(?:บาท|บ\\.|THB)",
+        "(?:THB|฿)\\s*{AMOUNT}"
+      ],
+      "date": [
+        "(?:วันที่|เมื่อ|on)\\s*{DATE}",
+        "{DATE}\\s+\\d{1,2}:\\d{2}"
+      ],
+      "card": [
+        "(?:บัตร(?:เครดิต)?|card|ลงท้าย(?:ด้วย)?|ending)[^0-9]{0,20}?(\\d{4})(?![0-9,.])",
+        "[xX*•]{2,}[\\s\\-]?(\\d{4})(?![0-9,.])",
+        "(?<![A-Za-z])[xX*](\\d{4})(?![0-9,.])"
+      ]
+    }
+  ]
+}

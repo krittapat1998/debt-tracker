@@ -1,0 +1,105 @@
+# Debt Tracker
+
+แอพมือถือส่วนตัว (Flutter, iOS + Android) สำหรับติดตามหนี้บัตรเครดิต บัตรกดเงินสด และสินเชื่อส่วนบุคคล
+ข้อมูลทั้งหมดเก็บในเครื่อง (SQLite) ไม่มี backend/cloud
+
+## เริ่มใช้งาน
+
+```bash
+flutter pub get
+flutter run            # เลือก iOS simulator / Android emulator / เครื่องจริง
+flutter test           # unit test สูตรคำนวณ, SMS parser, ฐานข้อมูล, backup + smoke test ทุกหน้าจอ
+```
+
+ต้องการ iOS 14+ / Android 7.0 (API 24)+
+
+## ฟีเจอร์
+
+| ฟีเจอร์ | ที่อยู่ในโค้ด |
+|---|---|
+| แดชบอร์ด: หนี้รวม, ต้องจ่ายเดือนนี้ (ขั้นต่ำ + ค่าผ่อน), ดอกโดยประมาณ, เรียงดอกสูง→ต่ำ (avalanche) + ไฮไลต์ดอกแพงสุด | `lib/ui/screens/dashboard_screen.dart` |
+| รายละเอียดบัตร: วงเงินย่อย, ยอดเรียกเก็บ, รายการผ่อน (งวดเหลือ, ปิดได้เร็วสุด/lock-in, ยอดปิดรวมค่าปรับ), ประวัติจ่าย | `account_detail_screen.dart`, `schedule_screen.dart` |
+| บันทึกการจ่ายแบบเร็ว พร้อมพรีวิวผลกระทบ | `payment_form_screen.dart` |
+| คำนวณโปะ: ลดค่าผ่อน vs ผ่อนเท่าเดิมปิดเร็วขึ้น | `calculator_screen.dart`, `lib/domain/finance/prepayment.dart` |
+| แจ้งเตือนก่อนครบกำหนด / วันตัดรอบ / งวดสินเชื่อ | `lib/platform/notification_service.dart` |
+| Export JSON (เข้ารหัส AES-256-GCM ได้) / CSV, กู้คืน | `lib/data/backup/backup_service.dart` |
+| ดึงยอดจาก SMS (Android อ่านอัตโนมัติ, iOS วางข้อความ) | `lib/data/sources/sms/`, `android/.../Sms*.kt` |
+| Home screen widget | `android/.../DebtWidgetProvider.kt`, `ios/DebtWidget/DebtWidget.swift` |
+
+## โครงสร้าง
+
+```
+lib/
+  core/                 วันที่ (ปี พ.ศ.), รูปแบบเงิน
+  domain/
+    models/             Account, CreditLine (วงเงินย่อย), InstallmentPlan, Payment
+    finance/            LoanMath, LoanState, InstallmentEngine, PrepaymentComparison, PortfolioSummary
+  data/
+    db/                 SQLite schema
+    repositories/       interface + SQLite implementation (สลับแหล่งเก็บได้โดยไม่แตะ UI)
+    services/           LedgerService (ทุกการเขียนผ่านที่นี่), SettingsService
+    sources/
+      statement_source_parser.dart   interface กลาง StatementSourceParser
+      sms/                           SmsParserService (implements StatementSourceParser) + config
+      email/                         EmailParserService (โครงไว้สำหรับอนาคต)
+      statement_import_service.dart  parse → จับคู่บัตร → ให้ผู้ใช้ยืนยัน → บันทึก
+    backup/
+  platform/             SMS bridge, notifications, home widget
+  ui/                   Riverpod providers + screens
+assets/sms_patterns.json  regex ของแต่ละธนาคาร (แก้/เพิ่มได้โดยไม่ต้องแก้โค้ด)
+```
+
+## โมเดลข้อมูลและการคำนวณ
+
+- **บัตร 1 ใบมีได้หลายวงเงินย่อย** (`CreditLine`) แต่ละอันมีวงเงิน ยอดคงค้าง ดอกเบี้ย และวิธีคิดดอกของตัวเอง
+  เช่น วงเงินบัตรเครดิต 16% กับวงเงินสินเชื่อ 25% ในบัตรเดียวกัน ถ้าวงเงินใช้ร่วมกันให้ใส่ "วงเงินรวม"
+- **ยอดคงค้างของวงเงินย่อย = ยอดหมุนเวียน ไม่รวมรายการผ่อน** รายการผ่อนเก็บยอดเงินต้นคงเหลือของตัวเอง
+- **สถานะรายการผ่อนไม่ได้ถูกเก็บ แต่คำนวณใหม่ (replay) จากประวัติการจ่ายทุกครั้ง** — ลบ/แก้การจ่ายแล้วตัวเลขถูกเสมอ
+- **ลดต้นลดดอก**: ดอก = เงินต้นคงเหลือ × r, ค่างวด `P × r / (1 − (1 + r)^−n)`
+- **Flat rate**: ดอกต่อเดือนคงที่จากเงินต้นตั้งต้น แอพแสดงอัตราที่แท้จริง (IRR × 12) เช่น flat 10% 12 เดือน ≈ 17.97%
+- **โปะเพิ่ม**: ลดค่าผ่อน (คงจำนวนงวด) หรือ ผ่อนเท่าเดิมปิดเร็วขึ้น
+  - flat rate หลังโปะ แอพคิดดอกใหม่จากเงินต้นคงเหลือ (เป็นการประมาณ เงื่อนไขจริงแต่ละธนาคารต่างกัน)
+- **รายการผ่อนที่รวมอยู่ในยอดบัตร** (เปิดสวิตช์ "ค่างวดรวมอยู่ในยอดเรียกเก็บ"): ไม่ถูกบวกซ้ำในยอดต้องจ่าย และงวดเดินอัตโนมัติทุกวันครบกำหนด
+- **จ่ายไปแล้วกี่งวด**: สำหรับสัญญาที่ผ่อนมาก่อนเริ่มใช้แอพ
+- **lock-in / ค่าปรับ**: แสดงวันที่ปิดได้เร็วสุด, ยอดปิดรวมค่าปรับ, และ avalanche จะข้ามรายการที่ยังติด lock-in
+
+ทั้งหมดมี unit test ใน `test/domain/`
+
+## SMS ธนาคาร
+
+**Android**: ขอสิทธิ์ `READ_SMS` + `RECEIVE_SMS` พร้อมคำอธิบายในแอพ
+- สแกน SMS 45 วันล่าสุด หรือเปิด "รับ SMS ใหม่อัตโนมัติ" (`SmsReceiver.kt` เก็บเฉพาะ SMS ที่ผู้ส่งเป็นธนาคาร
+  หรือมีคำว่า ยอดเรียกเก็บ/ชำระ ฯลฯ ไม่เก็บ OTP และแจ้งเตือนให้ตรวจสอบเมื่อปิดแอพอยู่)
+- ทุกรายการต้องผ่านหน้า "ตรวจสอบก่อนบันทึก" แก้ไขได้ทุกช่อง ไม่มีการบันทึกอัตโนมัติ
+- พาร์สในเครื่องเท่านั้น ไม่ส่ง SMS ออกจากเครื่อง
+
+**iOS**: ไม่มี API อ่าน SMS → คัดลอก SMS แล้ว "วางจากคลิปบอร์ด" ในหน้านำเข้า (ใช้ parser และหน้าตรวจสอบเดียวกับ Android)
+ทำให้เร็วขึ้นด้วย Shortcuts: ระบบอัตโนมัติ → ข้อความ (จากธนาคาร) → คัดลอกไปยังคลิปบอร์ด + เปิดแอพ Debt Tracker
+
+**เพิ่ม/แก้รูปแบบ SMS**
+- แก้ `assets/sms_patterns.json` (ชื่อผู้ส่งในไฟล์เป็นตัวอย่าง — ตรวจชื่อผู้ส่งจริงในเครื่องแล้วปรับ)
+- หรือในแอพ: ตั้งค่า → รูปแบบ SMS ธนาคาร (เก็บในเครื่อง มีช่องทดสอบ)
+- มาโคร: `{AMOUNT}`, `{MONEY}` (ต้องมีคอมมาหรือทศนิยม กันสับสนกับเลขท้ายบัตร), `{DATE}` (รองรับ พ.ศ./ค.ศ., "5 พ.ย. 69"), `{CARD}`
+- ส่งตัวอย่าง SMS จริงธนาคารละ 1–2 ข้อความมา จะช่วยให้ปรับ regex ได้แม่นขึ้นมาก (เพิ่มเป็น test ใน `test/data/sms_parser_test.dart`)
+
+**อีเมล (อนาคต)**: implement `StatementSourceParser` ใน `lib/data/sources/email/email_parser_service.dart`
+แล้วเพิ่มใน `statementParsersProvider` (`lib/ui/providers.dart`) — data model และ UI ไม่ต้องแก้
+
+## Home screen widget
+
+- **Android**: กดค้างหน้าโฮม → Widgets → Debt Tracker
+- **iOS**: target `DebtWidgetExtension` อยู่ในโปรเจคแล้ว ใช้ App Group `group.com.krittapat.debtTracker` แชร์ข้อมูล
+  ก่อนรันบนเครื่องจริง เปิด `ios/Runner.xcworkspace` → Signing & Capabilities ของทั้ง **Runner** และ **DebtWidgetExtension**
+  → ตรวจว่า Team ถูกต้องและ App Groups มี `group.com.krittapat.debtTracker` (Xcode จะลงทะเบียนให้)
+
+## ความเป็นส่วนตัว / สำรองข้อมูล
+
+- ไม่มี server ข้อมูลอยู่ใน SQLite ของแอพ
+- ไฟล์สำรองตั้งรหัสผ่านได้: AES-256-GCM, key จาก PBKDF2-HMAC-SHA256 (120,000 รอบ) — ลืมรหัสผ่านจะเปิดไฟล์ไม่ได้
+- CSV ไม่เข้ารหัส ใช้สำหรับเปิดใน Excel/Sheets
+
+## หมายเหตุ Play Store
+
+Google อนุมัติ `READ_SMS` เฉพาะแอพ SMS/default handler หรือกรณีพิเศษตาม policy
+ถ้าใช้เอง (side-load / internal testing) ไม่มีปัญหา ถ้าจะเผยแพร่ต้องเตรียมคำชี้แจงเหตุผล
+หรือสร้าง flavor ที่ตัด permission SMS ออก (ฟีเจอร์วางข้อความยังใช้ได้)

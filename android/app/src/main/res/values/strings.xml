@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_title">หนี้รวมทั้งหมด</string>
+    <string name="widget_description">ยอดหนี้รวมและบัตรที่ใกล้ครบกำหนดชำระ</string>
+    <string name="widget_due_month">ต้องจ่ายเดือนนี้ %1$s</string>
+    <string name="widget_next_due">ใกล้ครบกำหนด</string>
+    <string name="widget_open_app">เปิดแอพเพื่ออัปเดตข้อมูล</string>
+    <string name="widget_today">วันนี้</string>
+    <string name="widget_tomorrow">พรุ่งนี้</string>
+    <string name="widget_in_days">อีก %1$d วัน</string>
+    <string name="widget_overdue">เลยมา %1$d วัน</string>
+    <string name="sms_channel_name">SMS แจ้งยอดจากธนาคาร</string>
+    <string name="sms_notification_title">มี SMS จากธนาคารรอตรวจสอบ</string>
+    <string name="sms_notification_text">%1$d รายการ — แตะเพื่อตรวจสอบก่อนบันทึก</string>
+</resources>

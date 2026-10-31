@@ -1,0 +1,3 @@
+// Gives the widget the same version numbers as the app
+// (FLUTTER_BUILD_NAME / FLUTTER_BUILD_NUMBER) without linking any Pods.
+#include "../Flutter/Generated.xcconfig"
