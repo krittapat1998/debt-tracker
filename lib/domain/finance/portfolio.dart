@@ -152,6 +152,30 @@ class AccountSummary {
   double get estimatedMonthlyInterest =>
       debtItems.fold(0.0, (s, d) => s + d.monthlyInterest);
 
+  /// Latest statement cutoff on or before today: the newer of the typed-in
+  /// statement date and the last billing day.
+  DateTime? get lastCutoff {
+    final bd = account.billingDay;
+    final byDay = bd == null ? null : previousOccurrenceOfDay(bd, today);
+    final sd = account.statementDate;
+    if (byDay == null || sd == null) return byDay ?? sd;
+    return sd.isAfter(byDay) ? sd : byDay;
+  }
+
+  /// The cutoff after [lastCutoff], when the billing day is known.
+  DateTime? get nextCutoff {
+    final bd = account.billingDay;
+    return bd == null ? null : nextDayAfter(bd, lastCutoff ?? today);
+  }
+
+  /// Recorded spending after [lastCutoff]: already in the balance, but the
+  /// bank bills it on the next statement.
+  double get spendingSinceCutoff {
+    final c = lastCutoff;
+    if (c == null) return 0;
+    return spendings.where((s) => s.date.isAfter(c)).fold(0.0, (t, s) => t + s.amount);
+  }
+
   /// Due date of the latest statement.
   DateTime? get statementDueDate {
     if (account.statementDueDate != null) return account.statementDueDate;

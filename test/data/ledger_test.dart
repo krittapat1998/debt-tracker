@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:debt_tracker/data/backup/backup_service.dart';
@@ -20,6 +21,8 @@ void main() {
   late SqlitePaymentRepository payments;
   late SqliteInstallmentRepository plans;
   late SqliteSpendingRepository spendings;
+  // The account below is set up, balance typed in, on 1 Oct.
+  late DateTime now;
 
   final account = Account(id: 'a', name: 'KTC', type: AccountType.creditCard, createdAt: DateTime(2026));
   CreditLine cardLine({double balance = 10000}) =>
@@ -28,6 +31,7 @@ void main() {
   setUpAll(sqfliteFfiInit);
 
   setUp(() async {
+    now = DateTime(2026, 10, 1, 9);
     db = await AppDatabase.open(factory: databaseFactoryFfi, path: inMemoryDatabasePath);
     lines = SqliteCreditLineRepository(db);
     payments = SqlitePaymentRepository(db);
@@ -39,6 +43,7 @@ void main() {
       plans: plans,
       payments: payments,
       spendings: spendings,
+      clock: () => now,
     );
     await ledger.saveAccount(account, [cardLine()]);
   });
@@ -96,6 +101,81 @@ void main() {
     await ledger.setLineBalance('l', 500);
     await ledger.deleteSpending(s.id);
     expect((await lines.getById('l'))!.balance, 0);
+  });
+
+  group('balance typed in from the bank', () {
+    Spending spentOn(DateTime date, double amount) => Spending(
+          id: 's${date.day}-$amount',
+          accountId: 'a',
+          creditLineId: 'l',
+          date: date,
+          amount: amount,
+          createdAt: now,
+        );
+    Payment paidOn(DateTime date, double amount) => Payment(
+          id: 'p${date.day}-$amount',
+          accountId: 'a',
+          creditLineId: 'l',
+          date: date,
+          amount: amount,
+          type: PaymentType.other,
+          createdAt: now,
+        );
+    Future<double> balance() async => (await lines.getById('l'))!.balance;
+
+    setUp(() async {
+      now = DateTime(2026, 11, 1, 20);
+      await ledger.setLineBalance('l', 11500);
+    });
+
+    test('remembers the day it was typed in', () async {
+      expect((await lines.getById('l'))!.balanceAsOf, DateTime(2026, 11, 1));
+    });
+
+    test('older spending and payments are kept in the history without counting twice', () async {
+      final s = await ledger.recordSpending(spentOn(DateTime(2026, 10, 28), 1500));
+      expect(s.lineBalanceApplied, 0);
+      final p = await ledger.recordPayment(paidOn(DateTime(2026, 10, 30), 2000));
+      expect(p.lineBalanceApplied, 0);
+      expect(await balance(), 11500);
+      expect(await spendings.getAll(), hasLength(1));
+
+      // Deleting them leaves the typed-in balance alone too.
+      await ledger.deleteSpending(s.id);
+      await ledger.deletePayment(p.id);
+      expect(await balance(), 11500);
+    });
+
+    test('later entries still count', () async {
+      await ledger.recordSpending(spentOn(DateTime(2026, 11, 2), 300));
+      await ledger.recordPayment(paidOn(DateTime(2026, 11, 3), 800));
+      expect(await balance(), 11000);
+    });
+
+    test('the same day counts unless the user says the balance has it', () async {
+      await ledger.recordSpending(spentOn(DateTime(2026, 11, 1), 200));
+      expect(await balance(), 11700);
+      await ledger.recordSpending(spentOn(DateTime(2026, 11, 1), 300), alreadyInBalance: true);
+      expect(await balance(), 11700);
+      // And the user can say an older one is not in it after all.
+      await ledger.recordSpending(spentOn(DateTime(2026, 10, 28), 100), alreadyInBalance: false);
+      expect(await balance(), 11800);
+    });
+  });
+
+  test('saving the account stamps only balances that were typed in', () async {
+    expect((await lines.getById('l'))!.balanceAsOf, DateTime(2026, 10, 1));
+
+    now = DateTime(2026, 10, 15);
+    await ledger.saveAccount(account, [cardLine().copyWith(name: 'วงเงินบัตร')]);
+    expect((await lines.getById('l'))!.balanceAsOf, DateTime(2026, 10, 1));
+
+    await ledger.saveAccount(account, [
+      cardLine(balance: 9500),
+      const CreditLine(id: 'l2', accountId: 'a', name: 'สินเชื่อ', annualRate: 25),
+    ]);
+    expect((await lines.getById('l'))!.balanceAsOf, DateTime(2026, 10, 15));
+    expect((await lines.getById('l2'))!.balanceAsOf, isNull);
   });
 
   test('deleting the account deletes its spending', () async {
@@ -174,16 +254,46 @@ void main() {
     final v1 = await databaseFactoryFfi.openDatabase(path,
         options: OpenDatabaseOptions(
           version: 1,
-          onCreate: (db, _) => db.execute('CREATE TABLE accounts (id TEXT PRIMARY KEY, name TEXT NOT NULL)'),
+          onCreate: (db, _) async {
+            await db.execute('CREATE TABLE accounts (id TEXT PRIMARY KEY, name TEXT NOT NULL)');
+            await db.execute('CREATE TABLE credit_lines (id TEXT PRIMARY KEY)');
+          },
         ));
     await v1.insert('accounts', {'id': 'old', 'name': 'KTC'});
     await v1.close();
 
     final upgraded = await AppDatabase.open(factory: databaseFactoryFfi, path: path);
     addTearDown(upgraded.close);
-    expect(await upgraded.db.getVersion(), 2);
+    expect(await upgraded.db.getVersion(), 3);
     expect(await upgraded.db.query('accounts'), hasLength(1));
     expect(await upgraded.db.query('spendings'), isEmpty);
+  });
+
+  test('opening a version 2 database keeps spending as added to the balance', () async {
+    final dir = Directory.systemTemp.createTempSync('debt_db');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final path = '${dir.path}/v2.db';
+    final v2 = await databaseFactoryFfi.openDatabase(path,
+        options: OpenDatabaseOptions(
+          version: 2,
+          onCreate: (db, _) async {
+            await db.execute('CREATE TABLE credit_lines (id TEXT PRIMARY KEY, account_id TEXT, name TEXT, '
+                'credit_limit REAL, balance REAL, annual_rate REAL, interest_method TEXT, sort_order INTEGER)');
+            await db.execute('CREATE TABLE spendings (id TEXT PRIMARY KEY, account_id TEXT, credit_line_id TEXT, '
+                'date TEXT, amount REAL, note TEXT, source TEXT, created_at TEXT)');
+          },
+        ));
+    await v2.insert('credit_lines', {'id': 'l', 'account_id': 'a', 'name': 'บัตร', 'balance': 5000, 'annual_rate': 16,
+        'interest_method': 'reducing'});
+    await v2.insert('spendings', {'id': 's', 'account_id': 'a', 'credit_line_id': 'l', 'date': '2026-10-28',
+        'amount': 1200, 'source': 'manual', 'created_at': '2026-10-28T12:00:00.000'});
+    await v2.close();
+
+    final upgraded = await AppDatabase.open(factory: databaseFactoryFfi, path: path);
+    addTearDown(upgraded.close);
+    expect(await upgraded.db.getVersion(), 3);
+    expect((await SqliteSpendingRepository(upgraded).getAll()).single.lineBalanceApplied, 1200);
+    expect((await SqliteCreditLineRepository(upgraded).getAll()).single.balanceAsOf, isNull);
   });
 
   group('backup', () {
@@ -199,6 +309,23 @@ void main() {
       expect(counts['spendings'], 1);
       expect((await lines.getById('l'))!.balance, 9300);
       expect((await spendings.getAll()).single.note, 'ค่ากาแฟ');
+    });
+
+    test('a backup from before version 3 restores spending as added to the balance', () async {
+      await ledger.recordSpending(spending(300));
+      final backup = BackupService(db);
+      final json = jsonDecode(await backup.exportJson()) as Map<String, dynamic>;
+      final data = json['data'] as Map<String, dynamic>;
+      for (final r in [...data['credit_lines'] as List, ...data['spendings'] as List]) {
+        (r as Map)
+          ..remove('balance_as_of')
+          ..remove('line_balance_applied');
+      }
+      await backup.importJson(jsonEncode(json));
+      final restored = (await spendings.getAll()).single;
+      expect(restored.lineBalanceApplied, 300);
+      await ledger.deleteSpending(restored.id);
+      expect((await lines.getById('l'))!.balance, 10000);
     });
 
     test('encrypted backup needs the right password', () async {

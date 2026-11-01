@@ -6,6 +6,7 @@ import 'package:debt_tracker/domain/models/credit_line.dart';
 import 'package:debt_tracker/domain/models/enums.dart';
 import 'package:debt_tracker/domain/models/installment_plan.dart';
 import 'package:debt_tracker/domain/models/payment.dart';
+import 'package:debt_tracker/domain/models/spending.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 final _created = DateTime(2026, 1, 1);
@@ -229,6 +230,44 @@ void main() {
       );
       expect(s.accounts.map((a) => a.account.id), ['high', 'mid', 'low']);
       expect(s.mostExpensive!.account.id, 'high');
+    });
+
+    test('spending after the last cutoff waits for the next bill', () {
+      Spending spent(String id, DateTime date, double amount) =>
+          Spending(id: id, accountId: 'a', creditLineId: 'l', date: date, amount: amount, createdAt: date);
+      AccountSummary summary({DateTime? stmtDate, int? billingDay}) => AccountSummary(
+            account: Account(
+              id: 'a',
+              name: 'KTC',
+              type: AccountType.creditCard,
+              billingDay: billingDay,
+              statementDate: stmtDate,
+              createdAt: _created,
+            ),
+            lines: [line('l', 'a', balance: 20000)],
+            plans: const [],
+            payments: const [],
+            spendings: [
+              spent('s1', DateTime(2026, 10, 20), 900), // before the cutoff: on the bill already
+              spent('s2', DateTime(2026, 10, 25), 400), // on the cutoff day: on that bill
+              spent('s3', DateTime(2026, 10, 28), 1500),
+            ],
+            today: DateTime(2026, 11, 1),
+          );
+
+      final byDay = summary(billingDay: 25);
+      expect(byDay.lastCutoff, DateTime(2026, 10, 25));
+      expect(byDay.nextCutoff, DateTime(2026, 11, 25));
+      expect(byDay.spendingSinceCutoff, 1500);
+
+      // A newer typed-in statement date wins over the billing day.
+      final byStatement = summary(billingDay: 25, stmtDate: DateTime(2026, 10, 27));
+      expect(byStatement.lastCutoff, DateTime(2026, 10, 27));
+      expect(byStatement.spendingSinceCutoff, 1500);
+
+      // No billing day and no statement: nothing to split.
+      expect(summary().lastCutoff, isNull);
+      expect(summary().spendingSinceCutoff, 0);
     });
 
     test('byDueDate puts overdue first and accounts with nothing due last', () {

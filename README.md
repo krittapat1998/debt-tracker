@@ -21,7 +21,8 @@ flutter test           # unit test สูตรคำนวณ, SMS parser, ฐ�
 | รายละเอียดบัตร: กล่อง "ต้องจ่ายภายใน" (ขั้นต่ำ/เต็มยอด/ค่างวด), ปุ่มลัด จ่าย/ใช้จ่าย/อัปเดตยอดบิล, วงเงินย่อย, รายการผ่อน (ข้อมูลหลัก + รายละเอียดแบบย่อ/ขยาย: lock-in, ยอดปิดรวมค่าปรับ), ประวัติจ่าย | `account_detail_screen.dart`, `schedule_screen.dart` |
 | ประวัติ: การจ่ายและยอดใช้จ่ายรวมกัน กรองตามประเภท/บัตร แตะเพื่อเปิดบัตร | `history_screen.dart` |
 | บันทึกการจ่ายแบบเร็ว พร้อมพรีวิวผลกระทบ | `payment_form_screen.dart` |
-| บันทึกยอดใช้จ่าย (ซื้อของ) พร้อมรายละเอียด บวกเข้ายอดคงค้างของวงเงินย่อย ลบแล้วหักคืน | `account_detail_screen.dart`, `lib/domain/models/spending.dart` |
+| บันทึกยอดใช้จ่าย (ซื้อของ) พร้อมรายละเอียด บวกเข้ายอดคงค้างของวงเงินย่อย ลบแล้วหักคืน; แสดงยอดที่รอเรียกเก็บรอบหน้า (ใช้หลังวันตัดรอบ) | `account_detail_screen.dart`, `lib/domain/models/spending.dart` |
+| ยอดย้อนหลังไม่นับซ้ำ: จำวันที่แก้ยอดคงค้างตามแอพธนาคารล่าสุด ยอดใช้จ่าย/การจ่ายที่ลงวันที่ก่อนวันนั้นเก็บเข้าประวัติอย่างเดียว (วันเดียวกันให้ผู้ใช้เลือก) | `lib/data/services/ledger_service.dart`, `lib/domain/models/credit_line.dart` |
 | คำนวณโปะ: ลดค่าผ่อน vs ผ่อนเท่าเดิมปิดเร็วขึ้น | `calculator_screen.dart`, `lib/domain/finance/prepayment.dart` |
 | แจ้งเตือนก่อนครบกำหนด / วันตัดรอบ / งวดสินเชื่อ | `lib/platform/notification_service.dart` |
 | Export JSON (เข้ารหัส AES-256-GCM ได้) / CSV, กู้คืน | `lib/data/backup/backup_service.dart` |

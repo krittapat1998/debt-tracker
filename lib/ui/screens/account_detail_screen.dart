@@ -317,6 +317,15 @@ class _OverviewCard extends StatelessWidget {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
+            if (a.spendingSinceCutoff > 0.005) ...[
+              const SizedBox(height: 10),
+              InfoRow('รอเรียกเก็บรอบหน้า', fmtMoney(a.spendingSinceCutoff)),
+              Text(
+                'รายการที่บันทึกไว้หลังตัดรอบ ${fmtDate(a.lastCutoff!)} · รวมอยู่ใน${a.account.type.revolvingLabel}แล้ว'
+                '${a.nextCutoff == null ? '' : ' จะเข้าบิลรอบ ${fmtDate(a.nextCutoff!)}'}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
             if (a.account.note != null && a.account.note!.isNotEmpty) ...[
               const SizedBox(height: 10),
               Text(a.account.note!, style: Theme.of(context).textTheme.bodySmall),
@@ -373,7 +382,14 @@ class _LineTile extends ConsumerWidget {
                 children: [
                   Icon(Icons.edit_outlined, size: 14, color: muted),
                   const SizedBox(width: 4),
-                  Expanded(child: Text('แตะเพื่อแก้$labelให้ตรงกับแอพธนาคาร', style: t.bodySmall?.copyWith(color: muted))),
+                  Expanded(
+                    child: Text(
+                      line.balanceAsOf == null
+                          ? 'แตะเพื่อแก้$labelให้ตรงกับแอพธนาคาร'
+                          : 'อัปเดตตามแอพธนาคารล่าสุด ${fmtDate(line.balanceAsOf!)} · แตะเพื่อแก้',
+                      style: t.bodySmall?.copyWith(color: muted),
+                    ),
+                  ),
                 ],
               ),
             ],
@@ -395,7 +411,8 @@ class _LineTile extends ConsumerWidget {
             AmountField(controller: controller, label: 'ยอดล่าสุด', autofocus: true),
             const SizedBox(height: 8),
             const Text(
-              'ดูจากแอพธนาคารหรือใบแจ้งยอด ไม่ต้องรวมยอดผ่อนที่บันทึกเป็นรายการผ่อนไว้แล้ว',
+              'ดูจากแอพธนาคารหรือใบแจ้งยอด ไม่ต้องรวมยอดผ่อนที่บันทึกเป็นรายการผ่อนไว้แล้ว\n'
+              'ยอดใช้จ่ายและการจ่ายที่ลงวันที่ก่อนวันนี้ จะถือว่ารวมอยู่ในยอดนี้แล้ว ไม่บวกหรือหักซ้ำ',
               style: TextStyle(fontSize: 12),
             ),
           ],
@@ -424,6 +441,10 @@ Future<void> _addSpending(BuildContext context, WidgetRef ref, AccountSummary a)
   final formKey = GlobalKey<FormState>();
   var line = a.lines.first;
   var date = DateTime.now();
+  // The typed-in balance may already have a backdated purchase; ask then.
+  bool? included; // the user's answer; null = guess from the dates
+  bool ask() => line.mayCount(date);
+  bool skip() => ask() && (included ?? line.alreadyCounts(date));
   final saved = await showDialog<bool>(
     context: context,
     builder: (ctx) => StatefulBuilder(
@@ -434,6 +455,7 @@ Future<void> _addSpending(BuildContext context, WidgetRef ref, AccountSummary a)
             key: formKey,
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (a.lines.length > 1) ...[
                   DropdownButtonFormField<CreditLine>(
@@ -441,7 +463,10 @@ Future<void> _addSpending(BuildContext context, WidgetRef ref, AccountSummary a)
                     isExpanded: true,
                     decoration: const InputDecoration(labelText: 'ใช้จากวงเงิน'),
                     items: [for (final l in a.lines) DropdownMenuItem(value: l, child: Text(l.name))],
-                    onChanged: (l) => setState(() => line = l ?? line),
+                    onChanged: (l) => setState(() {
+                      line = l ?? line;
+                      included = null;
+                    }),
                   ),
                   const SizedBox(height: 12),
                 ],
@@ -452,11 +477,28 @@ Future<void> _addSpending(BuildContext context, WidgetRef ref, AccountSummary a)
                   decoration: const InputDecoration(labelText: 'รายละเอียด', hintText: 'จ่ายค่าอะไร เช่น ค่าอาหาร'),
                 ),
                 const SizedBox(height: 12),
-                DateField(value: date, label: 'วันที่ใช้จ่าย', onChanged: (d) => setState(() => date = d ?? date)),
+                DateField(
+                  value: date,
+                  label: 'วันที่ใช้จ่าย',
+                  onChanged: (d) => setState(() {
+                    date = d ?? date;
+                    included = null;
+                  }),
+                ),
+                if (ask())
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: skip(),
+                    onChanged: (v) => setState(() => included = v),
+                    title: Text('$labelที่แก้ไว้เมื่อ ${fmtDate(line.balanceAsOf!)} รวมรายการนี้แล้ว'),
+                    subtitle: const Text('เปิดไว้ = เก็บเข้าประวัติอย่างเดียว ไม่บวกซ้ำ'),
+                  ),
                 const SizedBox(height: 8),
                 Text(
-                  'บวกเพิ่มจาก$labelตอนนี้ ${fmtMoney(line.balance)} '
-                  '— ถ้าแบ่งจ่ายเป็นงวด ให้ใช้ "เพิ่มรายการผ่อน" แทน',
+                  skip()
+                      ? 'ไม่บวกเพิ่ม — $labelยังเป็น ${fmtMoney(line.balance)}'
+                      : 'บวกเพิ่มจาก$labelตอนนี้ ${fmtMoney(line.balance)} '
+                          '— ถ้าแบ่งจ่ายเป็นงวด ให้ใช้ "เพิ่มรายการผ่อน" แทน',
                   style: const TextStyle(fontSize: 12),
                 ),
               ],
@@ -478,18 +520,26 @@ Future<void> _addSpending(BuildContext context, WidgetRef ref, AccountSummary a)
   if (saved != true) return;
   final amount = parseAmount(amountCtl.text)!;
   final note = noteCtl.text.trim();
-  await ref.read(ledgerProvider).recordSpending(Spending(
-        id: newId(),
-        accountId: line.accountId,
-        creditLineId: line.id,
-        date: date,
-        amount: amount,
-        note: note.isEmpty ? null : note,
-        createdAt: DateTime.now(),
-      ));
+  final s = await ref.read(ledgerProvider).recordSpending(
+        Spending(
+          id: newId(),
+          accountId: line.accountId,
+          creditLineId: line.id,
+          date: date,
+          amount: amount,
+          note: note.isEmpty ? null : note,
+          createdAt: DateTime.now(),
+        ),
+        alreadyInBalance: skip(),
+      );
   ref.refreshData();
   if (context.mounted) {
-    showSnack(context, 'เพิ่มยอดใช้จ่าย ${fmtMoney(amount)} แล้ว · $label ${fmtMoney(line.balance + amount)}');
+    showSnack(
+      context,
+      s.lineBalanceApplied > 0
+          ? 'เพิ่มยอดใช้จ่าย ${fmtMoney(amount)} แล้ว · $label ${fmtMoney(line.balance + amount)}'
+          : 'บันทึกยอดใช้จ่าย ${fmtMoney(amount)} แล้ว · $labelรวมรายการนี้อยู่แล้ว ไม่บวกซ้ำ',
+    );
   }
 }
 
@@ -547,6 +597,7 @@ class SpendingTile extends ConsumerWidget {
       if (showAccount) summary.account.name,
       ?lineName,
       if (s.source != PaymentSource.manual) 'จาก ${s.source.label}',
+      if (s.creditLineId != null && s.lineBalanceApplied < 0.005) 'ไม่ได้บวกยอด (รวมอยู่แล้ว)',
     ];
     return ListTile(
       leading: CircleAvatar(
@@ -570,7 +621,8 @@ class SpendingTile extends ConsumerWidget {
     final ok = await confirmDialog(
       context,
       title: 'ลบรายการใช้จ่ายนี้?',
-      message: '${fmtMoney(spending.amount)} เมื่อ ${fmtDate(spending.date)} — ยอดนี้จะถูกหักออกจากยอดคงค้าง',
+      message: '${fmtMoney(spending.amount)} เมื่อ ${fmtDate(spending.date)} — '
+          '${spending.lineBalanceApplied > 0 ? 'ยอดนี้จะถูกหักออกจากยอดคงค้าง' : 'ยอดคงค้างไม่เปลี่ยน เพราะตอนบันทึกไม่ได้บวกเข้าไป'}',
       confirmLabel: 'ลบ',
       destructive: true,
     );

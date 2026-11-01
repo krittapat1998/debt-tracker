@@ -43,8 +43,14 @@ class _MemorySettings implements SettingsRepository {
 /// Records spending instead of writing to a database.
 class _RecordingLedger implements LedgerService {
   final spending = <Spending>[];
+  final alreadyInBalance = <bool?>[];
   @override
-  Future<void> recordSpending(Spending s) async => spending.add(s);
+  Future<Spending> recordSpending(Spending s, {bool? alreadyInBalance}) async {
+    this.alreadyInBalance.add(alreadyInBalance);
+    final saved = s.copyWith(lineBalanceApplied: alreadyInBalance == true ? 0 : s.amount);
+    spending.add(saved);
+    return saved;
+  }
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -52,7 +58,7 @@ class _RecordingLedger implements LedgerService {
 /// Sample data shaped like real use: a card with a 0% installment billed
 /// on the statement, a card with two sub-limits and a locked-in loan, and a
 /// flat-rate cash-card loan with a prepayment.
-PortfolioSummary samplePortfolio({List<Spending> spendings = const []}) {
+PortfolioSummary samplePortfolio({List<Spending> spendings = const [], DateTime? ktcBalanceAsOf}) {
   final today = dateOnly(DateTime.now());
   final created = today.subtract(const Duration(days: 120));
   DateTime ago(int days) => today.subtract(Duration(days: days));
@@ -64,11 +70,12 @@ PortfolioSummary samplePortfolio({List<Spending> spendings = const []}) {
           billingDay: 10, dueDay: 28, statementBalance: 8400, minimumPayment: 840, statementDate: ago(20), createdAt: created),
       Account(id: 'a3', name: 'First Choice', type: AccountType.cashCard, dueDay: 15, createdAt: created),
     ],
-    lines: const [
-      CreditLine(id: 'l1', accountId: 'a1', name: 'วงเงินบัตรเครดิต', creditLimit: 80000, balance: 12000, annualRate: 16),
-      CreditLine(id: 'l2', accountId: 'a2', name: 'วงเงินบัตรเครดิต', creditLimit: 100000, balance: 8400, annualRate: 16),
-      CreditLine(id: 'l3', accountId: 'a2', name: 'วงเงินสินเชื่อ', creditLimit: 60000, annualRate: 22, sortOrder: 1),
-      CreditLine(id: 'l4', accountId: 'a3', name: 'วงเงินกดเงินสด', creditLimit: 50000, annualRate: 25),
+    lines: [
+      CreditLine(id: 'l1', accountId: 'a1', name: 'วงเงินบัตรเครดิต', creditLimit: 80000, balance: 12000, annualRate: 16,
+          balanceAsOf: ktcBalanceAsOf),
+      const CreditLine(id: 'l2', accountId: 'a2', name: 'วงเงินบัตรเครดิต', creditLimit: 100000, balance: 8400, annualRate: 16),
+      const CreditLine(id: 'l3', accountId: 'a2', name: 'วงเงินสินเชื่อ', creditLimit: 60000, annualRate: 22, sortOrder: 1),
+      const CreditLine(id: 'l4', accountId: 'a3', name: 'วงเงินกดเงินสด', creditLimit: 50000, annualRate: 25),
     ],
     plans: [
       InstallmentPlan(id: 'p1', accountId: 'a1', creditLineId: 'l1', name: 'ผ่อน iPhone 0%', principal: 45000, annualRate: 0,
@@ -218,6 +225,47 @@ void main() {
     expect((s.accountId, s.creditLineId, s.amount, s.note), ('a1', 'l1', 1200.0, 'ค่าอาหาร'));
     expect(dateOnly(s.date), dateOnly(DateTime.now()));
     expect(find.text('เพิ่มยอดใช้จ่าย ฿1,200.00 แล้ว · ยอดรูดบัตร ฿13,200.00'), findsOneWidget);
+    // The balance was never typed in, so nothing to ask.
+    expect(find.byType(SwitchListTile), findsNothing);
+  });
+
+  testWidgets('spending on the day the balance was typed in asks whether it is already counted', (tester) async {
+    final ledger = _RecordingLedger();
+    final today = dateOnly(DateTime.now());
+    await pump(tester, const AccountDetailScreen(accountId: 'a1'),
+        data: samplePortfolio(ktcBalanceAsOf: today), ledger: ledger);
+    await tester.scrollUntilVisible(find.textContaining('อัปเดตตามแอพธนาคารล่าสุด ${fmtDate(today)}'), 300,
+        scrollable: find.byType(Scrollable).first);
+    await settle(tester);
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, 3000));
+    await settle(tester);
+
+    await tester.tap(find.text('เพิ่มยอดใช้จ่าย'));
+    await settle(tester);
+    // Same day could go either way: asked, and added unless switched on.
+    expect(find.text('ยอดรูดบัตรที่แก้ไว้เมื่อ ${fmtDate(today)} รวมรายการนี้แล้ว'), findsOneWidget);
+    expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value, isFalse);
+    await tester.tap(find.byType(SwitchListTile));
+    await settle(tester);
+    expect(find.text('ไม่บวกเพิ่ม — ยอดรูดบัตรยังเป็น ฿12,000.00'), findsOneWidget);
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'ยอดที่ใช้'), '1,500');
+    await tester.tap(find.text('บันทึก'));
+    await settle(tester);
+    expect(ledger.alreadyInBalance.single, isTrue);
+    expect(find.text('บันทึกยอดใช้จ่าย ฿1,500.00 แล้ว · ยอดรูดบัตรรวมรายการนี้อยู่แล้ว ไม่บวกซ้ำ'), findsOneWidget);
+  });
+
+  testWidgets('spending that was not added to the balance says so', (tester) async {
+    final today = dateOnly(DateTime.now());
+    await pump(
+      tester,
+      const HistoryScreen(),
+      data: samplePortfolio(spendings: [
+        Spending(id: 's1', accountId: 'a1', creditLineId: 'l1', date: today, amount: 350, createdAt: today),
+      ]),
+    );
+    expect(find.textContaining('ไม่ได้บวกยอด (รวมอยู่แล้ว)'), findsOneWidget);
   });
 
   testWidgets('add spending on a card with two sub-limits asks which one', (tester) async {
@@ -244,7 +292,7 @@ void main() {
       data: samplePortfolio(spendings: [
         for (var i = 1; i <= 4; i++)
           Spending(id: 's$i', accountId: 'a2', creditLineId: 'l2', date: today.subtract(Duration(days: i)),
-              amount: 100.0 * i, note: i == 1 ? 'ค่าอาหาร' : null, createdAt: today),
+              amount: 100.0 * i, lineBalanceApplied: 100.0 * i, note: i == 1 ? 'ค่าอาหาร' : null, createdAt: today),
       ]),
     );
     await tester.scrollUntilVisible(find.text('ประวัติการใช้จ่าย (4)'), 300, scrollable: find.byType(Scrollable).first);
@@ -264,7 +312,8 @@ void main() {
       tester,
       const HistoryScreen(),
       data: samplePortfolio(spendings: [
-        Spending(id: 's1', accountId: 'a1', creditLineId: 'l1', date: today, amount: 350, note: 'ค่าอาหาร', createdAt: today),
+        Spending(id: 's1', accountId: 'a1', creditLineId: 'l1', date: today, amount: 350, lineBalanceApplied: 350,
+            note: 'ค่าอาหาร', createdAt: today),
       ]),
     );
     expect(find.text('฿350.00 · ค่าอาหาร'), findsOneWidget);

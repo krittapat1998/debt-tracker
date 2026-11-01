@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:uuid/uuid.dart';
 
+import '../../core/date_utils.dart';
 import '../../domain/models/account.dart';
 import '../../domain/models/credit_line.dart';
 import '../../domain/models/installment_plan.dart';
@@ -22,16 +23,29 @@ class LedgerService {
     required this.plans,
     required this.payments,
     required this.spendings,
-  });
+    DateTime Function()? clock,
+  }) : _now = clock ?? DateTime.now;
 
   final AccountRepository accounts;
   final CreditLineRepository lines;
   final InstallmentRepository plans;
   final PaymentRepository payments;
   final SpendingRepository spendings;
+  final DateTime Function() _now;
 
-  Future<void> saveAccount(Account account, List<CreditLine> creditLines) =>
-      accounts.save(account, creditLines);
+  DateTime get _today => dateOnly(_now());
+
+  /// Saves the account. A sub-limit whose balance was typed in (a new one
+  /// with a balance, or a changed one) now matches the bank as of today.
+  Future<void> saveAccount(Account account, List<CreditLine> creditLines) async {
+    final stamped = <CreditLine>[];
+    for (final l in creditLines) {
+      final old = await lines.getById(l.id);
+      final typedIn = old == null ? l.balance > 0 : (old.balance - l.balance).abs() >= 0.005;
+      stamped.add(l.copyWith(balanceAsOf: typedIn ? _today : old?.balanceAsOf));
+    }
+    await accounts.save(account, stamped);
+  }
 
   Future<void> deleteAccount(String id) => accounts.delete(id);
 
@@ -40,12 +54,14 @@ class LedgerService {
   Future<void> deletePlan(String id) => plans.delete(id);
 
   /// Records a payment. Revolving payments reduce the sub-limit balance
-  /// right away; plan payments are picked up by the installment replay.
-  Future<Payment> recordPayment(Payment draft) async {
+  /// right away, unless the balance was typed in from the bank after the
+  /// payment date and so already has it ([alreadyInBalance] overrides that
+  /// guess). Plan payments are picked up by the installment replay.
+  Future<Payment> recordPayment(Payment draft, {bool? alreadyInBalance}) async {
     var applied = 0.0;
     if (draft.planId == null && draft.creditLineId != null) {
       final line = await lines.getById(draft.creditLineId!);
-      if (line != null) {
+      if (line != null && !(alreadyInBalance ?? line.alreadyCounts(draft.date))) {
         applied = math.min(draft.amount, math.max(0.0, line.balance));
         await lines.update(line.copyWith(balance: line.balance - applied));
       }
@@ -86,30 +102,41 @@ class LedgerService {
     ));
   }
 
+  /// Sets the balance from the bank app; it now counts everything up to today.
   Future<void> setLineBalance(String lineId, double balance) async {
     final line = await lines.getById(lineId);
     if (line == null) return;
-    await lines.update(line.copyWith(balance: math.max(0, balance)));
+    await lines.update(line.copyWith(balance: math.max(0, balance), balanceAsOf: _today));
   }
 
   /// New spending on a card (typed in, or from a "ใช้จ่ายบัตร" SMS): kept
-  /// in the history and added to the sub-limit balance.
-  Future<void> recordSpending(Spending spending) async {
+  /// in the history and added to the sub-limit balance, unless the balance
+  /// was typed in from the bank after it happened and so already has it
+  /// ([alreadyInBalance] overrides that guess).
+  Future<Spending> recordSpending(Spending spending, {bool? alreadyInBalance}) async {
+    var applied = 0.0;
     if (spending.creditLineId != null) {
       final line = await lines.getById(spending.creditLineId!);
-      if (line != null) await lines.update(line.copyWith(balance: line.balance + spending.amount));
+      if (line != null && !(alreadyInBalance ?? line.alreadyCounts(spending.date))) {
+        applied = spending.amount;
+        await lines.update(line.copyWith(balance: line.balance + applied));
+      }
     }
-    await spendings.insert(spending);
+    final saved = spending.copyWith(lineBalanceApplied: applied);
+    await spendings.insert(saved);
+    return saved;
   }
 
-  /// Deletes spending and takes it back off the balance (never below zero,
-  /// in case the balance was corrected by hand since).
+  /// Deletes spending and takes off what it added (never below zero, in
+  /// case the balance was corrected by hand since).
   Future<void> deleteSpending(String id) async {
     final s = await spendings.getById(id);
     if (s == null) return;
-    if (s.creditLineId != null) {
+    if (s.lineBalanceApplied > 0 && s.creditLineId != null) {
       final line = await lines.getById(s.creditLineId!);
-      if (line != null) await lines.update(line.copyWith(balance: math.max(0, line.balance - s.amount)));
+      if (line != null) {
+        await lines.update(line.copyWith(balance: math.max(0, line.balance - s.lineBalanceApplied)));
+      }
     }
     await spendings.delete(id);
   }
