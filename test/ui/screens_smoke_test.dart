@@ -221,6 +221,31 @@ void main() {
     await tester.scrollUntilVisible(find.text('ดอก flat 15%/ปี'), 300, scrollable: find.byType(Scrollable).first);
   });
 
+  testWidgets('a cash card calls new spending a withdrawal', (tester) async {
+    final ledger = _RecordingLedger();
+    await pump(tester, const AccountDetailScreen(accountId: 'a3'), ledger: ledger);
+    expect(find.text('เพิ่มยอดใช้จ่าย'), findsNothing);
+    await tester.tap(find.text('เพิ่มยอดกดเงินสด'));
+    await settle(tester);
+    expect(find.descendant(of: find.byType(AlertDialog), matching: find.text('เพิ่มยอดกดเงินสด')), findsOneWidget);
+    expect(find.text('วันที่กดเงินสด'), findsOneWidget);
+    await tester.enterText(find.widgetWithText(TextFormField, 'ยอดที่กด'), '3,000');
+    await tester.tap(find.text('บันทึก'));
+    await settle(tester);
+    expect((ledger.spending.single.creditLineId, ledger.spending.single.amount), ('l4', 3000.0));
+    expect(find.text('เพิ่มยอดกดเงินสด ฿3,000.00 แล้ว · ยอดกดเงินสด ฿3,000.00'), findsOneWidget);
+
+    final today = dateOnly(DateTime.now());
+    await pump(tester, const AccountDetailScreen(accountId: 'a3'),
+        data: samplePortfolio(spendings: [
+          Spending(id: 's1', accountId: 'a3', creditLineId: 'l4', date: today, amount: 3000, lineBalanceApplied: 3000,
+              createdAt: today),
+        ]),
+        ledger: ledger);
+    await tester.scrollUntilVisible(find.text('฿3,000.00 · กดเงินสด'), 300, scrollable: find.byType(Scrollable).first);
+    expect(find.text('ประวัติการกดเงินสด (1)'), findsOneWidget);
+  });
+
   testWidgets('add spending adds the amount to that sub-limit', (tester) async {
     final ledger = _RecordingLedger();
     await pump(tester, const AccountDetailScreen(accountId: 'a1'), ledger: ledger);

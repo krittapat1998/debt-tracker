@@ -1,14 +1,18 @@
 enum AccountType {
-  creditCard('บัตรเครดิต', 'ยอดรูดบัตร'),
-  cashCard('บัตรกดเงินสด', 'ยอดกดเงินสด'),
-  personalLoan('สินเชื่อส่วนบุคคล', 'ยอดเบิกใช้'),
-  other('อื่นๆ', 'ยอดใช้วงเงิน');
+  creditCard('บัตรเครดิต', 'ยอดรูดบัตร', 'ใช้จ่าย'),
+  cashCard('บัตรกดเงินสด', 'ยอดกดเงินสด', 'กดเงินสด'),
+  personalLoan('สินเชื่อส่วนบุคคล', 'ยอดเบิกใช้', 'ใช้จ่าย'),
+  other('อื่นๆ', 'ยอดใช้วงเงิน', 'ใช้จ่าย');
 
-  const AccountType(this.label, this.revolvingLabel);
+  const AccountType(this.label, this.revolvingLabel, this.spendingWord);
   final String label;
 
   /// Plain name for a sub-limit's balance outside installment plans.
   final String revolvingLabel;
+
+  /// What one new use of a sub-limit is called, as in "เพิ่มยอด…":
+  /// a purchase on a credit card, a withdrawal on a cash card.
+  final String spendingWord;
 
   static AccountType fromName(String? name) =>
       AccountType.values.firstWhere((e) => e.name == name,
