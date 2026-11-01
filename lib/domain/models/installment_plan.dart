@@ -22,9 +22,16 @@ class InstallmentPlan {
     this.penaltyFixed = 0,
     this.includedInStatement = false,
     this.paidBeforeTracking = 0,
+    this.anchorDay,
+    this.postedThrough,
     this.note,
     required this.createdAt,
   });
+
+  /// First cutoff of a card-billed plan whose first [posted] installments
+  /// are on the card already: the next one goes on at the next cutoff.
+  static DateTime firstCutoff({required int billingDay, required int posted, required DateTime today}) =>
+      addMonths(nextDayAfter(billingDay, today), -posted, anchorDay: billingDay);
 
   final String id;
   final String accountId;
@@ -42,7 +49,8 @@ class InstallmentPlan {
   /// Installment fixed by the bank; null = compute from principal/rate/term.
   final double? monthlyPaymentOverride;
 
-  /// Due date of the first installment.
+  /// Due date of the first installment. For a plan billed through the card
+  /// it is the cutoff the bank puts the first installment on the card.
   final DateTime startDate;
 
   /// No early closure allowed during the first N months.
@@ -56,16 +64,47 @@ class InstallmentPlan {
 
   /// True when the bank bills this installment inside the card statement:
   /// the dashboard must not add it a second time, and installments advance
-  /// automatically on each due date (you pay the card, not the plan).
+  /// automatically on each cutoff (you pay the card, not the plan).
   final bool includedInStatement;
 
-  /// Installments already paid before the plan was added to the app.
+  /// Installments already paid (on the card, for a card-billed plan) before
+  /// the plan was added to the app.
   final int paidBeforeTracking;
+
+  /// Day of month the schedule keeps after a short month (the card's
+  /// cutoff day for a card-billed plan); null = [startDate]'s day.
+  final int? anchorDay;
+
+  /// Card-billed plans: how many installments the app has put on the
+  /// sub-limit balance. Null = not started (saved by an older version).
+  final int? postedThrough;
   final String? note;
   final DateTime createdAt;
 
   DateTime dueDateOf(int installmentNumber) =>
-      addMonths(startDate, installmentNumber - 1, anchorDay: startDate.day);
+      addMonths(startDate, installmentNumber - 1, anchorDay: anchorDay ?? startDate.day);
+
+  InstallmentPlan copyWith({DateTime? startDate, int? anchorDay, int? postedThrough}) => InstallmentPlan(
+        id: id,
+        accountId: accountId,
+        creditLineId: creditLineId,
+        name: name,
+        principal: principal,
+        annualRate: annualRate,
+        interestMethod: interestMethod,
+        termMonths: termMonths,
+        monthlyPaymentOverride: monthlyPaymentOverride,
+        startDate: startDate ?? this.startDate,
+        lockInMonths: lockInMonths,
+        penaltyPercent: penaltyPercent,
+        penaltyFixed: penaltyFixed,
+        includedInStatement: includedInStatement,
+        paidBeforeTracking: paidBeforeTracking,
+        anchorDay: anchorDay ?? this.anchorDay,
+        postedThrough: postedThrough ?? this.postedThrough,
+        note: note,
+        createdAt: createdAt,
+      );
 
   DateTime? get earliestClosureDate =>
       lockInMonths > 0 ? addMonths(startDate, lockInMonths) : null;
@@ -86,6 +125,8 @@ class InstallmentPlan {
         'penalty_fixed': penaltyFixed,
         'included_in_statement': includedInStatement ? 1 : 0,
         'paid_before_tracking': paidBeforeTracking,
+        'anchor_day': anchorDay,
+        'posted_through': postedThrough,
         'note': note,
         'created_at': createdAt.toIso8601String(),
       };
@@ -108,6 +149,8 @@ class InstallmentPlan {
         includedInStatement:
             ((m['included_in_statement'] as num?)?.toInt() ?? 0) == 1,
         paidBeforeTracking: (m['paid_before_tracking'] as num?)?.toInt() ?? 0,
+        anchorDay: (m['anchor_day'] as num?)?.toInt(),
+        postedThrough: (m['posted_through'] as num?)?.toInt(),
         note: m['note'] as String?,
         createdAt: DateTime.parse(m['created_at'] as String),
       );

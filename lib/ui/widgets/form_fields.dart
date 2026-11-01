@@ -87,18 +87,21 @@ class IntField extends StatelessWidget {
 }
 
 class DayOfMonthField extends StatelessWidget {
-  const DayOfMonthField({super.key, required this.value, required this.label, required this.onChanged, this.helper});
+  const DayOfMonthField(
+      {super.key, required this.value, required this.label, required this.onChanged, this.helper, this.validator});
   final int? value;
   final String label;
   final String? helper;
   final ValueChanged<int?> onChanged;
+  final FormFieldValidator<int?>? validator;
 
   @override
   Widget build(BuildContext context) {
     return DropdownButtonFormField<int?>(
       initialValue: value,
       isExpanded: true,
-      decoration: InputDecoration(labelText: label, helperText: helper),
+      decoration: InputDecoration(labelText: label, helperText: helper, helperMaxLines: 3),
+      validator: validator,
       items: [
         const DropdownMenuItem(value: null, child: Text('ไม่ระบุ')),
         for (var d = 1; d <= 31; d++) DropdownMenuItem(value: d, child: Text('วันที่ $d')),

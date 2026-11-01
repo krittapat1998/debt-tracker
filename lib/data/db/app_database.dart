@@ -10,7 +10,7 @@ class AppDatabase {
   /// 2: spendings table. 3: credit_lines.balance_as_of and
   /// spendings.line_balance_applied (backdated entries vs typed-in balances).
   /// 4: recurring_charges table.
-  static const _version = 4;
+  static const _version = 5;
   static const fileName = 'debt_tracker.db';
 
   /// Parents before children (backup restore inserts in this order).
@@ -36,6 +36,10 @@ class AppDatabase {
             if (oldVersion == 2) batch.execute('ALTER TABLE spendings ADD COLUMN line_balance_applied REAL');
           }
           if (oldVersion < 4) _createRecurringCharges(batch);
+          if (oldVersion < 5) {
+            batch.execute('ALTER TABLE installment_plans ADD COLUMN anchor_day INTEGER');
+            batch.execute('ALTER TABLE installment_plans ADD COLUMN posted_through INTEGER');
+          }
           await batch.commit(noResult: true);
         },
       ),
@@ -92,6 +96,8 @@ class AppDatabase {
         penalty_fixed REAL NOT NULL DEFAULT 0,
         included_in_statement INTEGER NOT NULL DEFAULT 0,
         paid_before_tracking INTEGER NOT NULL DEFAULT 0,
+        anchor_day INTEGER,
+        posted_through INTEGER,
         note TEXT,
         created_at TEXT NOT NULL
       )''');

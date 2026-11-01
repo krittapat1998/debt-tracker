@@ -47,8 +47,14 @@ class _RecordingLedger implements LedgerService {
   final spending = <Spending>[];
   final updated = <Spending>[];
   final charges = <RecurringCharge>[];
+  final savedPlans = <InstallmentPlan>[];
+  final billingDays = <(String, int)>[];
   @override
   Future<void> saveRecurring(RecurringCharge c) async => charges.add(c);
+  @override
+  Future<void> savePlan(InstallmentPlan p) async => savedPlans.add(p);
+  @override
+  Future<void> setBillingDay(String accountId, int day) async => billingDays.add((accountId, day));
   final alreadyInBalance = <bool?>[];
   @override
   Future<Spending> recordSpending(Spending s, {bool? alreadyInBalance}) async {
@@ -210,7 +216,12 @@ void main() {
     expect(find.text('ดอกสูงสุด 16%/ปี'), findsOneWidget);
     expect(find.byType(FloatingActionButton), findsNothing);
     await tester.scrollUntilVisible(find.text('ไม่มีดอก'), 300, scrollable: find.byType(Scrollable).first);
-    expect(find.text('ค่างวดรวมอยู่ในบิลบัตรแล้ว ไม่ต้องจ่ายแยก'), findsOneWidget);
+    expect(find.text('แอพบวกค่างวดเข้ายอดรูดบัตรให้ทุกวันตัดรอบ จ่ายพร้อมบิลบัตร ไม่ต้องจ่ายแยก'), findsOneWidget);
+    // iPhone 0%: 3 of 10 on the card, 7 × 4,500 still to come.
+    expect(find.text('บัตรแจ้งแล้ว 3/10 งวด · เหลืออีก 7 เดือน'), findsOneWidget);
+    expect(find.text('ยังไม่ลงบัตร 7 งวด'), findsOneWidget);
+    expect(find.text('ค่างวดที่บัตรยังไม่แจ้ง'), findsOneWidget);
+    expect(find.textContaining('7 งวด รวมดอกแล้ว'), findsOneWidget);
 
     // A paid statement and an overdue installment.
     await pump(tester, const AccountDetailScreen(accountId: 'a2'));
@@ -377,6 +388,8 @@ void main() {
     await settle(tester);
     expect(find.textContaining('ทุกเดือน วันที่ ${next.day}\nครั้งถัดไป ${fmtDate(next)}'), findsOneWidget);
 
+    await tester.ensureVisible(find.descendant(of: header, matching: find.text('เพิ่ม')));
+    await settle(tester);
     await tester.tap(find.descendant(of: header, matching: find.text('เพิ่ม')));
     await settle(tester);
     expect(find.text('เพิ่มรายการหักประจำ'), findsOneWidget);
@@ -507,6 +520,34 @@ void main() {
     final a3 = portfolio.byId('a3')!;
     await pump(tester, PlanFormScreen(account: a3, existing: a3.plans.first.plan));
     expect(find.textContaining('flat แพงกว่า'), findsOneWidget);
+  });
+
+  testWidgets('a plan billed on a cash card asks how far the card shows it', (tester) async {
+    final ledger = _RecordingLedger();
+    final a3 = portfolio.byId('a3')!;
+    await pump(tester, PlanFormScreen(account: a3), ledger: ledger);
+    await tester.enterText(find.widgetWithText(TextFormField, 'ชื่อรายการ'), 'เงินยืม');
+    await tester.enterText(find.widgetWithText(TextFormField, 'เงินต้นตั้งต้น'), '10000');
+    await tester.enterText(find.widgetWithText(TextFormField, 'ดอกเบี้ยต่อปี'), '25');
+    await tester.enterText(find.widgetWithText(TextFormField, 'จำนวนงวด'), '6');
+    await settle(tester);
+    // On by default for a cash card; the card has no cutoff day yet.
+    expect(find.text('วันครบกำหนดงวดแรก'), findsNothing);
+    await tester.scrollUntilVisible(find.text('บัตรแจ้งถึงงวดที่'), 300, scrollable: find.byType(Scrollable).first);
+    await tester.enterText(find.widgetWithText(TextFormField, 'บัตรแจ้งถึงงวดที่'), '3');
+    await tester.tap(find.text('ไม่ระบุ'));
+    await settle(tester);
+    await tester.tap(find.text('วันที่ 5').last);
+    await settle(tester);
+    expect(find.textContaining('งวดถัดไปแอพจะบวกเข้ายอดกดเงินสดวันตัดรอบ'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('บันทึก'), 300, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('บันทึก'));
+    await settle(tester);
+
+    expect(ledger.billingDays, [('a3', 5)]);
+    final p = ledger.savedPlans.single;
+    expect((p.includedInStatement, p.paidBeforeTracking, p.postedThrough, p.anchorDay), (true, 3, 3, 5));
+    expect(p.startDate, InstallmentPlan.firstCutoff(billingDay: 5, posted: 3, today: DateTime.now()));
   });
 
   testWidgets('payment form: default, installment, extra with preview', (tester) async {

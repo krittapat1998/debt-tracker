@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/date_utils.dart';
 
+import '../../domain/finance/installment_engine.dart';
 import '../../domain/models/account.dart';
 import '../../domain/models/credit_line.dart';
 import '../../domain/models/enums.dart';
@@ -47,7 +48,28 @@ class LedgerService {
       final typedIn = old == null ? l.balance > 0 : (old.balance - l.balance).abs() >= 0.005;
       stamped.add(l.copyWith(balanceAsOf: typedIn ? _now() : old?.balanceAsOf));
     }
+    final before = await accounts.getById(account.id);
     await accounts.save(account, stamped);
+    await _moveCutoffs(account, before?.billingDay);
+  }
+
+  /// Sets the card's cutoff day (asked for by the plan form when missing).
+  Future<void> setBillingDay(String accountId, int day) async {
+    final a = await accounts.getById(accountId);
+    if (a == null || a.billingDay == day) return;
+    final updated = a.withBillingDay(day);
+    await accounts.update(updated);
+    await _moveCutoffs(updated, a.billingDay);
+  }
+
+  /// Card-billed plans follow the card's cutoff day when it changes.
+  Future<void> _moveCutoffs(Account account, int? oldDay) async {
+    final day = account.billingDay;
+    if (day == null || day == oldDay) return;
+    for (final p in await plans.getAll()) {
+      if (p.accountId != account.id || !p.includedInStatement || p.anchorDay == null) continue;
+      await plans.save(p.copyWith(startDate: clampedDate(p.startDate.year, p.startDate.month, day), anchorDay: day));
+    }
   }
 
   Future<void> deleteAccount(String id) => accounts.delete(id);
@@ -149,6 +171,69 @@ class LedgerService {
 
   /// Stops a recurring charge; what it already recorded stays in the history.
   Future<void> deleteRecurring(String id) => recurring.delete(id);
+
+  Future<int>? _posting;
+
+  /// Puts each installment of a card-billed plan on its sub-limit balance on
+  /// the cutoff the bank does (kept in the history as spending), catching
+  /// up on days the app wasn't opened. Returns how many were put on.
+  /// Overlapping calls share one run so nothing is put on twice.
+  Future<int> postDueInstallments() => _posting ??= _postDueInstallments().whenComplete(() => _posting = null);
+
+  Future<int> _postDueInstallments() async {
+    final today = dateOnly(_now());
+    final cardPlans = (await plans.getAll()).where((p) => p.includedInStatement).toList();
+    if (cardPlans.isEmpty) return 0;
+    final allPayments = await payments.getAll();
+    var count = 0;
+    for (final plan in cardPlans) {
+      if (plan.postedThrough == null) {
+        await _startPosting(plan, allPayments, today);
+        continue;
+      }
+      final state = InstallmentEngine.replay(plan, allPayments, asOf: today);
+      final total = state.paidInstallments + state.remainingInstallments;
+      final line = plan.creditLineId == null ? null : await lines.getById(plan.creditLineId!);
+      var posted = plan.postedThrough!;
+      for (final r in state.paidRows.skip(posted)) {
+        if (line != null) {
+          await recordSpending(
+            Spending(
+              id: newId(),
+              accountId: plan.accountId,
+              creditLineId: line.id,
+              date: r.dueDate!,
+              amount: r.payment,
+              note: '${plan.name} งวด ${r.number}/$total',
+              source: PaymentSource.installment,
+              createdAt: _now(),
+            ),
+            // A balance typed in from the bank on or after the cutoff has it.
+            alreadyInBalance: line.mayCount(r.dueDate!),
+          );
+          count++;
+        }
+        posted = r.number;
+      }
+      if (posted != plan.postedThrough) await plans.save(plan.copyWith(postedThrough: posted));
+    }
+    return count;
+  }
+
+  /// A card-billed plan saved by an older version, which advanced it on due
+  /// dates: moves it to the cutoff before each one, when the bank puts it on
+  /// the card, and counts what is on the card by now as already in the
+  /// balance typed in from the bank.
+  Future<void> _startPosting(InstallmentPlan plan, List<Payment> allPayments, DateTime today) async {
+    var p = plan;
+    final day = (await accounts.getById(plan.accountId))?.billingDay;
+    if (day != null) {
+      final cutoff = previousOccurrenceOfDay(day, p.startDate.subtract(const Duration(days: 1)));
+      p = p.copyWith(startDate: cutoff, anchorDay: day);
+    }
+    final posted = InstallmentEngine.replay(p, allPayments, asOf: today).paidInstallments;
+    await plans.save(p.copyWith(postedThrough: posted));
+  }
 
   Future<int>? _recording;
 

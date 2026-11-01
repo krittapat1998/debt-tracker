@@ -73,7 +73,10 @@ enum PaymentSource {
   email('อีเมล'),
 
   /// Recorded by a recurring charge (e.g. Netflix every month).
-  recurring('รายการหักประจำ');
+  recurring('รายการหักประจำ'),
+
+  /// An installment of a card-billed plan, put on the card at its cutoff.
+  installment('รายการผ่อน');
 
   const PaymentSource(this.label);
   final String label;

@@ -50,7 +50,7 @@ class ScheduleScreen extends ConsumerWidget {
                   ),
                 );
               }
-              return _RowTile(row: rows[i - 1]);
+              return _RowTile(row: rows[i - 1], cardBilled: s.plan.includedInStatement);
             },
           );
         },
@@ -60,8 +60,11 @@ class ScheduleScreen extends ConsumerWidget {
 }
 
 class _RowTile extends StatelessWidget {
-  const _RowTile({required this.row});
+  const _RowTile({required this.row, required this.cardBilled});
   final ScheduleRow row;
+
+  /// Dates are the cutoffs the bank puts each installment on the card.
+  final bool cardBilled;
 
   @override
   Widget build(BuildContext context) {
@@ -80,11 +83,12 @@ class _RowTile extends StatelessWidget {
               : Text('${row.number}', style: t.labelSmall),
         ),
         title: Text(
-          '${row.dueDate == null ? 'งวด ${row.number}' : fmtDate(row.dueDate!)} · ${fmtMoney(row.payment)}',
+          '${row.dueDate == null ? 'งวด ${row.number}' : '${cardBilled ? 'ลงบัตร ' : ''}${fmtDate(row.dueDate!)}'}'
+          ' · ${fmtMoney(row.payment)}',
         ),
         subtitle: Text(
           'ต้น ${fmtMoney(row.principal)} · ดอก ${fmtMoney(row.interest)} · คงเหลือ ${fmtMoney(row.balance)}'
-          '${row.paidOn != null ? '\nจ่ายเมื่อ ${fmtDate(row.paidOn!)}' : (row.automatic ? '\nเดินงวดอัตโนมัติ' : '')}',
+          '${row.paidOn != null ? '\nจ่ายเมื่อ ${fmtDate(row.paidOn!)}' : (row.automatic ? (cardBilled ? '\nลงบัตรแล้ว' : '\nเดินงวดอัตโนมัติ') : '')}',
         ),
         isThreeLine: paid,
       ),
