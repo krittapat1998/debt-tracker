@@ -265,7 +265,11 @@ class _QuickActions extends ConsumerWidget {
             ),
             primary: true,
           ),
-          action(Icons.add_shopping_cart, 'เพิ่มยอดใช้จ่าย', a.lines.isEmpty ? null : () => _spendingDialog(context, ref, a)),
+          action(
+            a.account.type == AccountType.cashCard ? Icons.local_atm : Icons.add_shopping_cart,
+            'เพิ่มยอด${a.account.type.spendingWord}',
+            a.lines.isEmpty ? null : () => _spendingDialog(context, ref, a),
+          ),
           action(Icons.edit_note, 'อัปเดตยอดบิล', () => showStatementSheet(context, a)),
         ],
       ),
@@ -412,10 +416,10 @@ class _LineTile extends ConsumerWidget {
           children: [
             AmountField(controller: controller, label: 'ยอดล่าสุด', autofocus: true),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'ดูจากแอพธนาคารหรือใบแจ้งยอด ไม่ต้องรวมยอดผ่อนที่บันทึกเป็นรายการผ่อนไว้แล้ว\n'
-              'ยอดใช้จ่ายและการจ่ายที่ลงวันที่ก่อนวันนี้ จะถือว่ารวมอยู่ในยอดนี้แล้ว ไม่บวกหรือหักซ้ำ',
-              style: TextStyle(fontSize: 12),
+              'ยอด${a.account.type.spendingWord}และการจ่ายที่ลงวันที่ก่อนวันนี้ จะถือว่ารวมอยู่ในยอดนี้แล้ว ไม่บวกหรือหักซ้ำ',
+              style: const TextStyle(fontSize: 12),
             ),
           ],
         ),
@@ -439,6 +443,7 @@ class _LineTile extends ConsumerWidget {
 /// [existing], corrects that entry instead.
 Future<void> _spendingDialog(BuildContext context, WidgetRef ref, AccountSummary a, {Spending? existing}) async {
   final label = a.account.type.revolvingLabel;
+  final word = a.account.type.spendingWord;
   final amountCtl = TextEditingController(text: amountToField(existing?.amount));
   final noteCtl = TextEditingController(text: existing?.note ?? '');
   final formKey = GlobalKey<FormState>();
@@ -465,7 +470,7 @@ Future<void> _spendingDialog(BuildContext context, WidgetRef ref, AccountSummary
     context: context,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setState) => AlertDialog(
-        title: Text(existing == null ? 'เพิ่มยอดใช้จ่าย' : 'แก้ไขยอดใช้จ่าย'),
+        title: Text(existing == null ? 'เพิ่มยอด$word' : 'แก้ไขยอด$word'),
         content: SingleChildScrollView(
           child: Form(
             key: formKey,
@@ -488,7 +493,7 @@ Future<void> _spendingDialog(BuildContext context, WidgetRef ref, AccountSummary
                 ],
                 AmountField(
                   controller: amountCtl,
-                  label: 'ยอดที่ใช้',
+                  label: a.account.type == AccountType.cashCard ? 'ยอดที่กด' : 'ยอดที่ใช้',
                   required: true,
                   allowZero: false,
                   autofocus: existing == null,
@@ -497,12 +502,15 @@ Future<void> _spendingDialog(BuildContext context, WidgetRef ref, AccountSummary
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: noteCtl,
-                  decoration: const InputDecoration(labelText: 'รายละเอียด', hintText: 'จ่ายค่าอะไร เช่น ค่าอาหาร'),
+                  decoration: InputDecoration(
+                    labelText: 'รายละเอียด',
+                    hintText: a.account.type == AccountType.cashCard ? 'เอาไปใช้อะไร เช่น ค่าซ่อมรถ' : 'จ่ายค่าอะไร เช่น ค่าอาหาร',
+                  ),
                 ),
                 const SizedBox(height: 12),
                 DateField(
                   value: date,
-                  label: 'วันที่ใช้จ่าย',
+                  label: 'วันที่$word',
                   onChanged: (d) => setState(() {
                     date = d ?? date;
                     included = null;
@@ -569,10 +577,10 @@ Future<void> _spendingDialog(BuildContext context, WidgetRef ref, AccountSummary
     showSnack(
       context,
       existing != null
-          ? 'แก้ไขยอดใช้จ่ายแล้ว · $label ${fmtMoney(balanceAfter)}'
+          ? 'แก้ไขยอด$wordแล้ว · $label ${fmtMoney(balanceAfter)}'
           : s.lineBalanceApplied > 0
-              ? 'เพิ่มยอดใช้จ่าย ${fmtMoney(amount)} แล้ว · $label ${fmtMoney(balanceAfter)}'
-              : 'บันทึกยอดใช้จ่าย ${fmtMoney(amount)} แล้ว · $labelรวมรายการนี้อยู่แล้ว ไม่บวกซ้ำ',
+              ? 'เพิ่มยอด$word ${fmtMoney(amount)} แล้ว · $label ${fmtMoney(balanceAfter)}'
+              : 'บันทึกยอด$word ${fmtMoney(amount)} แล้ว · $labelรวมรายการนี้อยู่แล้ว ไม่บวกซ้ำ',
     );
   }
 }
@@ -829,7 +837,7 @@ class _SpendingSectionState extends State<_SpendingSection> {
     return Column(
       children: [
         SectionHeader(
-          'ประวัติการใช้จ่าย (${all.length})',
+          'ประวัติการ${widget.a.account.type.spendingWord} (${all.length})',
           trailing: all.length <= _collapsedCount
               ? null
               : TextButton(
@@ -853,6 +861,7 @@ class SpendingTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final s = spending;
+    final type = summary.account.type;
     String? lineName;
     if (summary.lines.length > 1) {
       for (final l in summary.lines) {
@@ -868,9 +877,9 @@ class SpendingTile extends ConsumerWidget {
     return ListTile(
       leading: CircleAvatar(
         backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-        child: const Icon(Icons.shopping_bag_outlined, size: 20),
+        child: Icon(type == AccountType.cashCard ? Icons.local_atm : Icons.shopping_bag_outlined, size: 20),
       ),
-      title: Text('${fmtMoney(s.amount)} · ${s.note ?? 'ใช้จ่าย'}'),
+      title: Text('${fmtMoney(s.amount)} · ${s.note ?? type.spendingWord}'),
       subtitle: Text([fmtDate(s.date), if (details.isNotEmpty) details.join(' · ')].join('\n')),
       isThreeLine: details.isNotEmpty,
       trailing: PopupMenuButton<bool>(
@@ -902,7 +911,7 @@ class SpendingTile extends ConsumerWidget {
             : 'ยอดนี้จะถูกหักออกจากยอดคงค้าง';
     final ok = await confirmDialog(
       context,
-      title: 'ลบรายการใช้จ่ายนี้?',
+      title: 'ลบรายการ${summary.account.type.spendingWord}นี้?',
       message: '${fmtMoney(spending.amount)} เมื่อ ${fmtDate(spending.date)} — $effect',
       confirmLabel: 'ลบ',
       destructive: true,
