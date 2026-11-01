@@ -58,8 +58,11 @@ final smsGatewayProvider = Provider<SmsGateway>((ref) => SmsGateway());
 /// `ref.invalidate(portfolioProvider)`.
 final portfolioProvider = FutureProvider<PortfolioSummary>((ref) async {
   // Charges that came due since the last look (app opened or resumed, or
-  // any write) become spending before the numbers are read.
-  await ref.watch(ledgerProvider).recordDueCharges();
+  // any write), and installments the bank put on a card at a cutoff, become
+  // spending before the numbers are read.
+  final ledger = ref.watch(ledgerProvider);
+  await ledger.recordDueCharges();
+  await ledger.postDueInstallments();
   final accounts = await ref.watch(accountRepositoryProvider).getAll();
   final lines = await ref.watch(creditLineRepositoryProvider).getAll();
   final plans = await ref.watch(installmentRepositoryProvider).getAll();

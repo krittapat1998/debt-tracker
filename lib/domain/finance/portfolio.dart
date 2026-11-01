@@ -8,6 +8,7 @@ import '../models/payment.dart';
 import '../models/recurring_charge.dart';
 import '../models/spending.dart';
 import 'installment_engine.dart';
+import 'loan_state.dart';
 
 enum DebtKind { revolving, installment }
 
@@ -96,6 +97,13 @@ class AccountSummary {
   double get installmentBalance => plans.fold(0.0, (s, p) => s + p.remainingPrincipal);
 
   double get totalDebt => revolvingBalance + installmentBalance;
+
+  /// Installments of card-billed plans the bank hasn't put on the card yet,
+  /// soonest first: what the coming cutoffs will add (interest included).
+  List<ScheduleRow> get comingInstallments => [
+        for (final p in plans)
+          if (p.plan.includedInStatement) ...p.projection,
+      ]..sort((x, y) => x.dueDate!.compareTo(y.dueDate!));
 
   double get creditLimit =>
       account.sharedLimit ?? lines.fold(0.0, (s, l) => s + l.creditLimit);

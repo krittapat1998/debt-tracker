@@ -285,6 +285,7 @@ class _OverviewCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final interest = a.estimatedMonthlyInterest;
+    final coming = a.comingInstallments;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -329,6 +330,15 @@ class _OverviewCard extends StatelessWidget {
               Text(
                 'รายการที่บันทึกไว้หลังตัดรอบ ${fmtDate(a.lastCutoff!)} · รวมอยู่ใน${a.account.type.revolvingLabel}แล้ว'
                 '${a.nextCutoff == null ? '' : ' จะเข้าบิลรอบ ${fmtDate(a.nextCutoff!)}'}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+            if (coming.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              InfoRow('ค่างวดที่บัตรยังไม่แจ้ง', fmtMoney(coming.fold(0.0, (s, r) => s + r.payment))),
+              Text(
+                '${coming.length} งวด รวมดอกแล้ว · แอพจะบวกเข้า${a.account.type.revolvingLabel}ทีละงวดทุกวันตัดรอบ'
+                ' งวดถัดไป ${fmtDate(coming.first.dueDate!)} ${fmtMoney(coming.first.payment)}',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
@@ -417,7 +427,7 @@ class _LineTile extends ConsumerWidget {
             AmountField(controller: controller, label: 'ยอดล่าสุด', autofocus: true),
             const SizedBox(height: 8),
             Text(
-              'ดูจากแอพธนาคารหรือใบแจ้งยอด ไม่ต้องรวมยอดผ่อนที่บันทึกเป็นรายการผ่อนไว้แล้ว\n'
+              'ดูจากแอพธนาคารหรือใบแจ้งยอด ค่างวดที่บัตรแจ้งแล้วรวมได้ แต่ไม่ต้องรวมงวดที่ยังไม่แจ้ง\n'
               'ยอด${a.account.type.spendingWord}และการจ่ายที่ลงวันที่ก่อนวันนี้ จะถือว่ารวมอยู่ในยอดนี้แล้ว ไม่บวกหรือหักซ้ำ',
               style: const TextStyle(fontSize: 12),
             ),
@@ -988,7 +998,8 @@ class _PlanCardState extends ConsumerState<_PlanCard> {
               Pill('ปิดยอดแล้ว', color: cs.positive, icon: Icons.check_circle)
             else ...[
               Text(
-                'จ่ายแล้ว ${p.paidInstallments}/${p.paidInstallments + p.remainingInstallments} งวด · '
+                '${plan.includedInStatement ? 'บัตรแจ้งแล้ว' : 'จ่ายแล้ว'} '
+                '${p.paidInstallments}/${p.paidInstallments + p.remainingInstallments} งวด · '
                 'เหลืออีก ${fmtMonths(p.remainingInstallments)}',
                 style: t.bodySmall,
               ),
@@ -1004,8 +1015,15 @@ class _PlanCardState extends ConsumerState<_PlanCard> {
               child: Column(
                 children: [
                   InfoRow('เงินต้นคงเหลือ', fmtMoney(p.remainingPrincipal), bold: true),
-                  if (!p.isClosed && next?.dueDate != null)
+                  if (!p.isClosed && next?.dueDate != null && !plan.includedInStatement)
                     InfoRow('งวดถัดไป ${fmtDate(next!.dueDate!)}', fmtMoney(next.payment)),
+                  if (!p.isClosed && next?.dueDate != null && plan.includedInStatement) ...[
+                    InfoRow('งวด ${next!.number} ลงบัตร ${fmtDate(next.dueDate!)}', fmtMoney(next.payment)),
+                    InfoRow(
+                      'ยังไม่ลงบัตร ${p.remainingInstallments} งวด',
+                      fmtMoney(p.projection.fold(0.0, (s, r) => s + r.payment)),
+                    ),
+                  ],
                   if (!p.isClosed && locked && p.earliestClosureDate != null)
                     InfoRow('ปิดก่อนกำหนดได้ตั้งแต่', fmtDate(p.earliestClosureDate!), valueColor: cs.warning),
                   if (!p.isClosed && plan.includedInStatement)
@@ -1016,7 +1034,8 @@ class _PlanCardState extends ConsumerState<_PlanCard> {
                           Icon(Icons.info_outline, size: 14, color: cs.onSurfaceVariant),
                           const SizedBox(width: 4),
                           Expanded(
-                            child: Text('ค่างวดรวมอยู่ในบิลบัตรแล้ว ไม่ต้องจ่ายแยก',
+                            child: Text(
+                                'แอพบวกค่างวดเข้า${a.account.type.revolvingLabel}ให้ทุกวันตัดรอบ จ่ายพร้อมบิลบัตร ไม่ต้องจ่ายแยก',
                                 style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
                           ),
                         ],

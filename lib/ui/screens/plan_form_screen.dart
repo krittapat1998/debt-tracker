@@ -32,13 +32,21 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
   late final _term = TextEditingController(text: _orig == null ? '' : '${_orig.termMonths}');
   late final _override = TextEditingController(text: amountToField(_orig?.monthlyPaymentOverride));
   late final _paidBefore = TextEditingController(text: '${_orig?.paidBeforeTracking ?? 0}');
+  // Card-billed: installments on the card now (billed or waiting for the next bill).
+  late final int _postedNow = _orig == null
+      ? 0
+      : widget.account.plans.where((s) => s.plan.id == _orig.id).firstOrNull?.paidInstallments ?? _orig.paidBeforeTracking;
+  late final _posted = TextEditingController(text: '$_postedNow');
   late final _lockIn = TextEditingController(text: '${_orig?.lockInMonths ?? 0}');
   late final _penaltyPct = TextEditingController(text: _orig == null || _orig.penaltyPercent == 0 ? '' : '${_orig.penaltyPercent}');
   late final _penaltyFixed = TextEditingController(text: amountToField(_orig?.penaltyFixed == 0 ? null : _orig?.penaltyFixed));
   late final _note = TextEditingController(text: _orig?.note ?? '');
   late InterestMethod _method = _orig?.interestMethod ?? InterestMethod.reducing;
   late bool _useOverride = _orig?.monthlyPaymentOverride != null;
-  late bool _included = _orig?.includedInStatement ?? widget.account.account.type == AccountType.creditCard;
+  late bool _included = _orig?.includedInStatement ??
+      const {AccountType.creditCard, AccountType.cashCard}.contains(widget.account.account.type);
+  // Asked for only when the card has no cutoff day yet.
+  late int? _billingDay = widget.account.account.billingDay;
   late String? _lineId = _orig?.creditLineId ?? (widget.account.lines.isEmpty ? null : widget.account.lines.first.id);
   late DateTime _start = _orig?.startDate ?? _defaultStart();
 
@@ -50,7 +58,7 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
 
   @override
   void dispose() {
-    for (final c in [_name, _principal, _rate, _term, _override, _paidBefore, _lockIn, _penaltyPct, _penaltyFixed, _note]) {
+    for (final c in [_name, _principal, _rate, _term, _override, _paidBefore, _posted, _lockIn, _penaltyPct, _penaltyFixed, _note]) {
       c.dispose();
     }
     super.dispose();
@@ -60,6 +68,22 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
     final principal = parseAmount(_principal.text);
     final term = int.tryParse(_term.text);
     if (principal == null || principal <= 0 || term == null || term <= 0) return null;
+    var start = _start;
+    var paidBefore = int.tryParse(_paidBefore.text) ?? 0;
+    int? anchorDay;
+    int? postedThrough;
+    final day = _billingDay;
+    if (_included && day != null) {
+      final posted = int.tryParse(_posted.text) ?? 0;
+      final o = _orig;
+      if (o != null && o.includedInStatement && o.postedThrough != null && posted == _postedNow) {
+        (start, paidBefore, anchorDay, postedThrough) = (o.startDate, o.paidBeforeTracking, o.anchorDay, o.postedThrough);
+      } else {
+        // The next installment goes on the card at the next cutoff.
+        start = InstallmentPlan.firstCutoff(billingDay: day, posted: posted, today: DateTime.now());
+        (paidBefore, anchorDay, postedThrough) = (posted, day, posted);
+      }
+    }
     return InstallmentPlan(
       id: _orig?.id ?? newId(),
       accountId: widget.account.account.id,
@@ -70,12 +94,14 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
       interestMethod: _method,
       termMonths: term,
       monthlyPaymentOverride: _useOverride ? parseAmount(_override.text) : null,
-      startDate: _start,
+      startDate: start,
       lockInMonths: int.tryParse(_lockIn.text) ?? 0,
       penaltyPercent: parseAmount(_penaltyPct.text) ?? 0,
       penaltyFixed: parseAmount(_penaltyFixed.text) ?? 0,
       includedInStatement: _included,
-      paidBeforeTracking: int.tryParse(_paidBefore.text) ?? 0,
+      paidBeforeTracking: paidBefore,
+      anchorDay: anchorDay,
+      postedThrough: postedThrough,
       note: _note.text.trim().isEmpty ? null : _note.text.trim(),
       createdAt: _orig?.createdAt ?? DateTime.now(),
     );
@@ -85,7 +111,11 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
     if (!_form.currentState!.validate()) return;
     final plan = _draft();
     if (plan == null) return;
-    await ref.read(ledgerProvider).savePlan(plan);
+    final ledger = ref.read(ledgerProvider);
+    if (_included && widget.account.account.billingDay == null) {
+      await ledger.setBillingDay(widget.account.account.id, _billingDay!);
+    }
+    await ledger.savePlan(plan);
     ref.refreshData();
     if (mounted) Navigator.pop(context);
   }
@@ -149,27 +179,47 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
               formGap,
             ],
             _Preview(plan: _draft()),
-            formGap,
-            DateField(
-              value: _start,
-              label: 'วันครบกำหนดงวดแรก',
-              onChanged: (d) => setState(() => _start = d ?? _start),
-            ),
-            formGap,
-            IntField(
-              controller: _paidBefore,
-              label: 'จ่ายไปแล้วกี่งวด (ก่อนเริ่มใช้แอพ)',
-              helper: 'งวดเหล่านี้จะถือว่าจ่ายครบตามตาราง',
-              max: 600,
-            ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('ค่างวดรวมอยู่ในยอดเรียกเก็บของบัตรแล้ว'),
-              subtitle: const Text(
-                  'เปิดสำหรับรายการแบ่งจ่ายบนบัตร: ไม่นับซ้ำในยอดต้องจ่ายเดือนนี้ และงวดจะเดินอัตโนมัติทุกวันครบกำหนด'),
+              subtitle: Text('เปิดสำหรับรายการผ่อนที่ขึ้นในยอดของบัตร: แอพบวกค่างวดเข้า'
+                  '${widget.account.account.type.revolvingLabel}ทุกวันตัดรอบ และไม่นับซ้ำในยอดต้องจ่ายเดือนนี้'),
               value: _included,
               onChanged: (v) => setState(() => _included = v),
             ),
+            if (_included) ...[
+              if (widget.account.account.billingDay == null) ...[
+                DayOfMonthField(
+                  value: _billingDay,
+                  label: 'วันตัดรอบบิลของบัตร',
+                  helper: 'ค่างวดจะขึ้นในบัตรวันนี้ของทุกเดือน บันทึกไว้ที่บัตรด้วย',
+                  validator: (v) => v == null ? 'กรุณาเลือกวันตัดรอบ' : null,
+                  onChanged: (v) => setState(() => _billingDay = v),
+                ),
+                formGap,
+              ],
+              IntField(
+                controller: _posted,
+                label: 'บัตรแจ้งถึงงวดที่',
+                helper: 'นับงวดที่ขึ้นในบัตรแล้ว ทั้งที่เรียกเก็บไปแล้วและที่รอเรียกเก็บ (ยังไม่มีใส่ 0)'
+                    '${_billingDay == null ? '' : ' · งวดถัดไปแอพจะบวกเข้า${widget.account.account.type.revolvingLabel}'
+                        'วันตัดรอบ ${fmtDate(nextDayAfter(_billingDay!, DateTime.now()))}'}',
+                max: int.tryParse(_term.text) ?? 600,
+              ),
+            ] else ...[
+              DateField(
+                value: _start,
+                label: 'วันครบกำหนดงวดแรก',
+                onChanged: (d) => setState(() => _start = d ?? _start),
+              ),
+              formGap,
+              IntField(
+                controller: _paidBefore,
+                label: 'จ่ายไปแล้วกี่งวด (ก่อนเริ่มใช้แอพ)',
+                helper: 'งวดเหล่านี้จะถือว่าจ่ายครบตามตาราง',
+                max: 600,
+              ),
+            ],
             SectionHeader('เงื่อนไขปิดก่อนกำหนด'),
             IntField(controller: _lockIn, label: 'ห้ามปิดก่อนกำหนด (lock-in)', suffix: 'เดือน', helper: '0 = ไม่มี', max: 600),
             formGap,

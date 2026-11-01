@@ -55,6 +55,24 @@ class Account {
   final String? note;
   final DateTime createdAt;
 
+  Account withBillingDay(int day) => Account(
+        id: id,
+        name: name,
+        type: type,
+        issuer: issuer,
+        cardLast4: cardLast4,
+        billingDay: day,
+        dueDay: dueDay,
+        statementBalance: statementBalance,
+        minimumPayment: minimumPayment,
+        statementDate: statementDate,
+        statementDueDate: statementDueDate,
+        sharedLimit: sharedLimit,
+        reminderDaysBefore: reminderDaysBefore,
+        note: note,
+        createdAt: createdAt,
+      );
+
   Account withStatement({
     required double statementBalance,
     required double minimumPayment,

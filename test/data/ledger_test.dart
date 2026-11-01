@@ -385,6 +385,111 @@ void main() {
     expect(a.statementDueDate, DateTime(2026, 10, 25));
   });
 
+  group('card-billed plans', () {
+    final cashCard = Account(id: 'c', name: 'First Choice', type: AccountType.cashCard, billingDay: 20, createdAt: DateTime(2026));
+    // 6 installments of 1,785; the card shows up to 3/6 on 2 Nov.
+    InstallmentPlan loan({int posted = 3}) => InstallmentPlan(
+          id: 'loan',
+          accountId: 'c',
+          creditLineId: 'cl',
+          name: 'เงินยืม',
+          principal: 10000,
+          annualRate: 25,
+          interestMethod: InterestMethod.reducing,
+          termMonths: 6,
+          monthlyPaymentOverride: 1785,
+          startDate: InstallmentPlan.firstCutoff(billingDay: 20, posted: posted, today: now),
+          includedInStatement: true,
+          paidBeforeTracking: posted,
+          anchorDay: 20,
+          postedThrough: posted,
+          createdAt: now,
+        );
+
+    setUp(() async {
+      now = DateTime(2026, 11, 2, 9);
+      await ledger.saveAccount(cashCard, [
+        const CreditLine(id: 'cl', accountId: 'c', name: 'วงเงินกดเงินสด', balance: 1785, annualRate: 25, creditLimit: 50000),
+      ]);
+    });
+
+    test('the first cutoff counts back from the next one, keeping a day-31 cutoff', () {
+      expect(InstallmentPlan.firstCutoff(billingDay: 20, posted: 3, today: DateTime(2026, 11, 2)), DateTime(2026, 8, 20));
+      // On the cutoff day the card already shows that day's installment.
+      expect(InstallmentPlan.firstCutoff(billingDay: 20, posted: 0, today: DateTime(2026, 11, 20)), DateTime(2026, 12, 20));
+      final p = loan().copyWith(
+          startDate: InstallmentPlan.firstCutoff(billingDay: 31, posted: 3, today: DateTime(2026, 11, 2)), anchorDay: 31);
+      expect(p.startDate, DateTime(2026, 8, 31));
+      expect([p.dueDateOf(4), p.dueDateOf(5), p.dueDateOf(6)],
+          [DateTime(2026, 11, 30), DateTime(2026, 12, 31), DateTime(2027, 1, 31)]);
+    });
+
+    test('each installment goes on the card at its cutoff, catching up', () async {
+      await ledger.savePlan(loan());
+      expect(await ledger.postDueInstallments(), 0);
+      expect((await lines.getById('cl'))!.balance, 1785);
+
+      now = DateTime(2026, 11, 20, 8);
+      expect(await ledger.postDueInstallments(), 1);
+      expect((await lines.getById('cl'))!.balance, 3570);
+      final s = (await spendings.getAll()).single;
+      expect((s.date, s.amount, s.note, s.source), (DateTime(2026, 11, 20), 1785.0, 'เงินยืม งวด 4/6', PaymentSource.installment));
+      expect((await plans.getById('loan'))!.postedThrough, 4);
+      expect(await ledger.postDueInstallments(), 0);
+
+      // Not opened over two cutoffs.
+      now = DateTime(2027, 1, 25);
+      expect(await ledger.postDueInstallments(), 2);
+      expect([for (final s in await spendings.getAll()) s.note]..sort(),
+          ['เงินยืม งวด 4/6', 'เงินยืม งวด 5/6', 'เงินยืม งวด 6/6']);
+      expect((await plans.getById('loan'))!.postedThrough, 6);
+    });
+
+    test('a balance typed in on or after the cutoff already has the installment', () async {
+      await ledger.savePlan(loan());
+      now = DateTime(2026, 11, 20, 18);
+      await ledger.setLineBalance('cl', 3570);
+      expect(await ledger.postDueInstallments(), 1);
+      expect((await lines.getById('cl'))!.balance, 3570);
+      expect((await spendings.getAll()).single.lineBalanceApplied, 0);
+    });
+
+    test('a plan from an older version moves to cutoffs and starts from what is on the card', () async {
+      // Saved with due dates on the 5th: 5 Sep, 5 Oct, 5 Nov, ...
+      await ledger.savePlan(InstallmentPlan(
+        id: 'old',
+        accountId: 'c',
+        creditLineId: 'cl',
+        name: 'ผ่อนทีวี',
+        principal: 6000,
+        annualRate: 0,
+        interestMethod: InterestMethod.reducing,
+        termMonths: 6,
+        startDate: DateTime(2026, 9, 5),
+        includedInStatement: true,
+        createdAt: now,
+      ));
+      expect(await ledger.postDueInstallments(), 0);
+      final p = (await plans.getById('old'))!;
+      expect((p.startDate, p.anchorDay), (DateTime(2026, 8, 20), 20));
+      // Cutoffs 20 Aug, 20 Sep and 20 Oct have passed; the typed-in balance has them.
+      expect(p.postedThrough, 3);
+      expect((await lines.getById('cl'))!.balance, 1785);
+      expect(await spendings.getAll(), isEmpty);
+    });
+
+    test('changing the cutoff day moves card-billed plans', () async {
+      await ledger.savePlan(loan());
+      await ledger.setBillingDay('c', 25);
+      var p = (await plans.getById('loan'))!;
+      expect((p.startDate, p.anchorDay, p.dueDateOf(4)), (DateTime(2026, 8, 25), 25, DateTime(2026, 11, 25)));
+
+      await ledger.saveAccount(cashCard.withBillingDay(10), [(await lines.getById('cl'))!]);
+      p = (await plans.getById('loan'))!;
+      expect((p.startDate, p.anchorDay), (DateTime(2026, 8, 10), 10));
+    });
+  });
+
   test('opening a version 1 database adds the spendings table and keeps the data', () async {
     final dir = Directory.systemTemp.createTempSync('debt_db');
     addTearDown(() => dir.deleteSync(recursive: true));
@@ -395,6 +500,7 @@ void main() {
           onCreate: (db, _) async {
             await db.execute('CREATE TABLE accounts (id TEXT PRIMARY KEY, name TEXT NOT NULL)');
             await db.execute('CREATE TABLE credit_lines (id TEXT PRIMARY KEY)');
+            await db.execute('CREATE TABLE installment_plans (id TEXT PRIMARY KEY)');
           },
         ));
     await v1.insert('accounts', {'id': 'old', 'name': 'KTC'});
@@ -402,7 +508,7 @@ void main() {
 
     final upgraded = await AppDatabase.open(factory: databaseFactoryFfi, path: path);
     addTearDown(upgraded.close);
-    expect(await upgraded.db.getVersion(), 4);
+    expect(await upgraded.db.getVersion(), 5);
     expect(await upgraded.db.query('accounts'), hasLength(1));
     expect(await upgraded.db.query('spendings'), isEmpty);
     expect(await upgraded.db.query('recurring_charges'), isEmpty);
@@ -420,6 +526,7 @@ void main() {
                 'credit_limit REAL, balance REAL, annual_rate REAL, interest_method TEXT, sort_order INTEGER)');
             await db.execute('CREATE TABLE spendings (id TEXT PRIMARY KEY, account_id TEXT, credit_line_id TEXT, '
                 'date TEXT, amount REAL, note TEXT, source TEXT, created_at TEXT)');
+            await db.execute('CREATE TABLE installment_plans (id TEXT PRIMARY KEY)');
           },
         ));
     await v2.insert('credit_lines', {'id': 'l', 'account_id': 'a', 'name': 'บัตร', 'balance': 5000, 'annual_rate': 16,
@@ -430,7 +537,7 @@ void main() {
 
     final upgraded = await AppDatabase.open(factory: databaseFactoryFfi, path: path);
     addTearDown(upgraded.close);
-    expect(await upgraded.db.getVersion(), 4);
+    expect(await upgraded.db.getVersion(), 5);
     expect((await SqliteSpendingRepository(upgraded).getAll()).single.lineBalanceApplied, 1200);
     expect((await SqliteCreditLineRepository(upgraded).getAll()).single.balanceAsOf, isNull);
   });
