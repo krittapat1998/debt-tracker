@@ -10,6 +10,7 @@ import 'package:debt_tracker/domain/models/credit_line.dart';
 import 'package:debt_tracker/domain/models/enums.dart';
 import 'package:debt_tracker/domain/models/installment_plan.dart';
 import 'package:debt_tracker/domain/models/payment.dart';
+import 'package:debt_tracker/domain/models/recurring_charge.dart';
 import 'package:debt_tracker/domain/models/spending.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -21,6 +22,7 @@ void main() {
   late SqlitePaymentRepository payments;
   late SqliteInstallmentRepository plans;
   late SqliteSpendingRepository spendings;
+  late SqliteRecurringChargeRepository recurring;
   // The account below is set up, balance typed in, on 1 Oct.
   late DateTime now;
 
@@ -37,12 +39,14 @@ void main() {
     payments = SqlitePaymentRepository(db);
     plans = SqliteInstallmentRepository(db);
     spendings = SqliteSpendingRepository(db);
+    recurring = SqliteRecurringChargeRepository(db);
     ledger = LedgerService(
       accounts: SqliteAccountRepository(db),
       lines: lines,
       plans: plans,
       payments: payments,
       spendings: spendings,
+      recurring: recurring,
       clock: () => now,
     );
     await ledger.saveAccount(account, [cardLine()]);
@@ -58,7 +62,7 @@ void main() {
         date: DateTime(2026, 10, 25),
         amount: amount,
         type: PaymentType.minimum,
-        createdAt: DateTime.now(),
+        createdAt: now,
       );
 
   test('revolving payment reduces the sub-limit balance and delete restores it', () async {
@@ -78,7 +82,7 @@ void main() {
         date: DateTime(2026, 10, 28),
         amount: amount,
         note: note,
-        createdAt: DateTime.now(),
+        createdAt: now,
       );
 
   test('spending is kept with its note, added to the balance, and delete takes it off', () async {
@@ -95,12 +99,67 @@ void main() {
     expect(await spendings.getAll(), isEmpty);
   });
 
-  test('deleting spending after the balance was corrected never goes below zero', () async {
+  test('deleting spending never takes the balance below zero', () async {
     final s = spending(1200);
     await ledger.recordSpending(s);
-    await ledger.setLineBalance('l', 500);
+    await ledger.saveAccount(account, [cardLine(balance: 500)]);
+    // Same moment as the entry, so not "typed in after" it.
     await ledger.deleteSpending(s.id);
     expect((await lines.getById('l'))!.balance, 0);
+  });
+
+  group('editing spending', () {
+    Future<double> balance([String id = 'l']) async => (await lines.getById(id))!.balance;
+
+    test('moves the balance by the difference', () async {
+      final s = await ledger.recordSpending(spending(1200));
+      expect(await balance(), 11200);
+
+      final bigger = await ledger.updateSpending(
+        Spending(id: s.id, accountId: 'a', creditLineId: 'l', date: s.date, amount: 1500, note: 'ค่าอาหาร',
+            createdAt: s.createdAt),
+        alreadyInBalance: false,
+      );
+      expect(await balance(), 11500);
+      expect(bigger.lineBalanceApplied, 1500);
+      expect((await spendings.getAll()).single.note, 'ค่าอาหาร');
+
+      // Added by mistake to a balance that already had it.
+      final fixed = await ledger.updateSpending(bigger, alreadyInBalance: true);
+      expect(await balance(), 10000);
+      expect(fixed.lineBalanceApplied, 0);
+      expect(await spendings.getAll(), hasLength(1));
+    });
+
+    test('can move it to another sub-limit', () async {
+      await ledger.saveAccount(account, [
+        cardLine(),
+        const CreditLine(id: 'l2', accountId: 'a', name: 'สินเชื่อ', annualRate: 25),
+      ]);
+      final s = await ledger.recordSpending(spending(700));
+      await ledger.updateSpending(
+        Spending(id: s.id, accountId: 'a', creditLineId: 'l2', date: s.date, amount: 700, createdAt: s.createdAt),
+        alreadyInBalance: false,
+      );
+      expect(await balance(), 10000);
+      expect(await balance('l2'), 700);
+    });
+
+    test('a balance typed in after the entry was recorded stays as typed', () async {
+      final s = await ledger.recordSpending(spending(1200));
+      final p = await ledger.recordPayment(payment(500));
+      now = DateTime(2026, 10, 2, 9);
+      await ledger.setLineBalance('l', 13000);
+
+      await ledger.updateSpending(
+        Spending(id: s.id, accountId: 'a', creditLineId: 'l', date: s.date, amount: 120, createdAt: s.createdAt),
+        alreadyInBalance: false,
+      );
+      expect(await balance(), 13000);
+      await ledger.deleteSpending(s.id);
+      await ledger.deletePayment(p.id);
+      expect(await balance(), 13000);
+    });
   });
 
   group('balance typed in from the bank', () {
@@ -129,7 +188,7 @@ void main() {
     });
 
     test('remembers the day it was typed in', () async {
-      expect((await lines.getById('l'))!.balanceAsOf, DateTime(2026, 11, 1));
+      expect((await lines.getById('l'))!.balanceAsOf, DateTime(2026, 11, 1, 20));
     });
 
     test('older spending and payments are kept in the history without counting twice', () async {
@@ -164,11 +223,11 @@ void main() {
   });
 
   test('saving the account stamps only balances that were typed in', () async {
-    expect((await lines.getById('l'))!.balanceAsOf, DateTime(2026, 10, 1));
+    expect((await lines.getById('l'))!.balanceAsOf, DateTime(2026, 10, 1, 9));
 
     now = DateTime(2026, 10, 15);
     await ledger.saveAccount(account, [cardLine().copyWith(name: 'วงเงินบัตร')]);
-    expect((await lines.getById('l'))!.balanceAsOf, DateTime(2026, 10, 1));
+    expect((await lines.getById('l'))!.balanceAsOf, DateTime(2026, 10, 1, 9));
 
     await ledger.saveAccount(account, [
       cardLine(balance: 9500),
@@ -176,6 +235,85 @@ void main() {
     ]);
     expect((await lines.getById('l'))!.balanceAsOf, DateTime(2026, 10, 15));
     expect((await lines.getById('l2'))!.balanceAsOf, isNull);
+  });
+
+  group('recurring charges', () {
+    RecurringCharge netflix({DateTime? next, RecurrenceInterval interval = RecurrenceInterval.monthly, bool active = true}) {
+      final d = next ?? DateTime(2026, 8, 31);
+      return RecurringCharge(
+        id: 'r',
+        accountId: 'a',
+        creditLineId: 'l',
+        name: 'Netflix',
+        amount: 419,
+        interval: interval,
+        nextDate: d,
+        anchorDay: d.day,
+        active: active,
+        createdAt: now,
+      );
+    }
+
+    test('a charge on the 31st falls on the last day of shorter months', () {
+      final c = netflix(next: DateTime(2027, 1, 31));
+      expect(c.following(DateTime(2027, 1, 31)), DateTime(2027, 2, 28));
+      expect(c.following(DateTime(2027, 2, 28)), DateTime(2027, 3, 31));
+      expect(netflix(next: DateTime(2026, 11, 1), interval: RecurrenceInterval.yearly).following(DateTime(2026, 11, 1)),
+          DateTime(2027, 11, 1));
+    });
+
+    test('records every charge that came due, once', () async {
+      await ledger.saveRecurring(netflix());
+      // The app wasn't opened for two months.
+      now = DateTime(2026, 11, 1, 8);
+      expect(await ledger.recordDueCharges(), 3);
+      final recorded = (await spendings.getAll()).reversed.toList();
+      expect(recorded.map((s) => s.date), [DateTime(2026, 8, 31), DateTime(2026, 9, 30), DateTime(2026, 10, 31)]);
+      expect(recorded.every((s) => s.note == 'Netflix' && s.source == PaymentSource.recurring), isTrue);
+      // The balance was typed in on 1 Oct, so only the 31 Oct charge is new.
+      expect((await lines.getById('l'))!.balance, 10419);
+      expect((await recurring.getAll()).single.nextDate, DateTime(2026, 11, 30));
+
+      expect(await ledger.recordDueCharges(), 0);
+      expect(await spendings.getAll(), hasLength(3));
+    });
+
+    test('overlapping runs record nothing twice', () async {
+      await ledger.saveRecurring(netflix());
+      now = DateTime(2026, 11, 1, 8);
+      await Future.wait([ledger.recordDueCharges(), ledger.recordDueCharges()]);
+      expect(await spendings.getAll(), hasLength(3));
+    });
+
+    test('a paused charge records nothing', () async {
+      await ledger.saveRecurring(netflix(active: false));
+      now = DateTime(2026, 11, 1, 8);
+      expect(await ledger.recordDueCharges(), 0);
+    });
+
+    test("the bank's SMS for the same charge is not recorded twice", () async {
+      now = DateTime(2026, 10, 30, 8);
+      await ledger.saveRecurring(netflix(next: DateTime(2026, 10, 31)));
+      await ledger.recordSpending(Spending(id: 'sms', accountId: 'a', creditLineId: 'l', date: DateTime(2026, 10, 30),
+          amount: 419, source: PaymentSource.sms, createdAt: now));
+      now = DateTime(2026, 11, 1, 8);
+      expect(await ledger.recordDueCharges(), 0);
+      expect((await recurring.getAll()).single.nextDate, DateTime(2026, 11, 30));
+
+      // And the other way round: the SMS comes after the automatic entry.
+      now = DateTime(2026, 12, 1, 8);
+      await ledger.recordDueCharges();
+      expect(await ledger.coveredByRecurring('a', 419, DateTime(2026, 12, 1)), isTrue);
+      expect(await ledger.coveredByRecurring('a', 420, DateTime(2026, 12, 1)), isFalse);
+    });
+
+    test('deleting a charge keeps what it recorded', () async {
+      await ledger.saveRecurring(netflix(next: DateTime(2026, 10, 1)));
+      await ledger.recordDueCharges();
+      await ledger.deleteRecurring('r');
+      expect(await recurring.getAll(), isEmpty);
+      expect(await spendings.getAll(), hasLength(1));
+    });
   });
 
   test('deleting the account deletes its spending', () async {
@@ -264,9 +402,10 @@ void main() {
 
     final upgraded = await AppDatabase.open(factory: databaseFactoryFfi, path: path);
     addTearDown(upgraded.close);
-    expect(await upgraded.db.getVersion(), 3);
+    expect(await upgraded.db.getVersion(), 4);
     expect(await upgraded.db.query('accounts'), hasLength(1));
     expect(await upgraded.db.query('spendings'), isEmpty);
+    expect(await upgraded.db.query('recurring_charges'), isEmpty);
   });
 
   test('opening a version 2 database keeps spending as added to the balance', () async {
@@ -291,13 +430,15 @@ void main() {
 
     final upgraded = await AppDatabase.open(factory: databaseFactoryFfi, path: path);
     addTearDown(upgraded.close);
-    expect(await upgraded.db.getVersion(), 3);
+    expect(await upgraded.db.getVersion(), 4);
     expect((await SqliteSpendingRepository(upgraded).getAll()).single.lineBalanceApplied, 1200);
     expect((await SqliteCreditLineRepository(upgraded).getAll()).single.balanceAsOf, isNull);
   });
 
   group('backup', () {
     test('plain JSON round-trip', () async {
+      await ledger.saveRecurring(RecurringCharge(id: 'r', accountId: 'a', creditLineId: 'l', name: 'Netflix', amount: 419,
+          nextDate: DateTime(2026, 11, 15), anchorDay: 15, createdAt: now));
       await ledger.recordPayment(payment(1000));
       await ledger.recordSpending(spending(300, note: 'ค่ากาแฟ'));
       final backup = BackupService(db);
@@ -307,6 +448,8 @@ void main() {
       expect(counts['accounts'], 1);
       expect(counts['payments'], 1);
       expect(counts['spendings'], 1);
+      expect(counts['recurring_charges'], 1);
+      expect((await recurring.getAll()).single.name, 'Netflix');
       expect((await lines.getById('l'))!.balance, 9300);
       expect((await spendings.getAll()).single.note, 'ค่ากาแฟ');
     });

@@ -5,6 +5,7 @@ import '../models/account.dart';
 import '../models/credit_line.dart';
 import '../models/installment_plan.dart';
 import '../models/payment.dart';
+import '../models/recurring_charge.dart';
 import '../models/spending.dart';
 import 'installment_engine.dart';
 
@@ -57,8 +58,10 @@ class AccountSummary {
     required List<InstallmentState> plans,
     required List<Payment> payments,
     List<Spending> spendings = const [],
+    List<RecurringCharge> recurring = const [],
     required DateTime today,
-  })  : lines = List.unmodifiable([...lines]..sort((a, b) => a.sortOrder.compareTo(b.sortOrder))),
+  })  : recurring = List.unmodifiable(recurring),
+        lines = List.unmodifiable([...lines]..sort((a, b) => a.sortOrder.compareTo(b.sortOrder))),
         plans = List.unmodifiable(plans),
         payments = List.unmodifiable([...payments]
           ..sort((a, b) {
@@ -81,6 +84,9 @@ class AccountSummary {
 
   /// Newest first.
   final List<Spending> spendings;
+
+  /// Card charges that repeat (Netflix and the like), oldest set up first.
+  final List<RecurringCharge> recurring;
   final DateTime today;
 
   List<InstallmentState> get activePlans => plans.where((p) => !p.isClosed).toList();
@@ -305,6 +311,7 @@ class PortfolioSummary {
     required List<InstallmentPlan> plans,
     required List<Payment> payments,
     List<Spending> spendings = const [],
+    List<RecurringCharge> recurring = const [],
     required DateTime today,
   }) {
     final summaries = [
@@ -318,6 +325,7 @@ class PortfolioSummary {
           ],
           payments: payments.where((p) => p.accountId == a.id).toList(),
           spendings: spendings.where((s) => s.accountId == a.id).toList(),
+          recurring: recurring.where((r) => r.accountId == a.id).toList(),
           today: today,
         ),
     ];

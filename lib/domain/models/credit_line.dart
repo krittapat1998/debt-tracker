@@ -28,16 +28,21 @@ class CreditLine {
   final InterestMethod interestMethod;
   final int sortOrder;
 
-  /// Day [balance] was last typed in to match the bank. Spending and
-  /// payments dated before it are already counted in [balance].
+  /// When [balance] was last typed in to match the bank. Spending and
+  /// payments dated before that day are already counted in [balance].
   final DateTime? balanceAsOf;
 
   /// Whether something dated [d] is already in [balance].
-  bool alreadyCounts(DateTime d) => balanceAsOf != null && dateOnly(d).isBefore(balanceAsOf!);
+  bool alreadyCounts(DateTime d) => balanceAsOf != null && dateOnly(d).isBefore(dateOnly(balanceAsOf!));
 
-  /// Whether [d] is on or before [balanceAsOf], so the typed-in balance may
-  /// already include it. The same day can go either way, so the user decides.
-  bool mayCount(DateTime d) => balanceAsOf != null && !dateOnly(d).isAfter(balanceAsOf!);
+  /// Whether [d] is on or before the day of [balanceAsOf], so the typed-in
+  /// balance may already include it. The same day can go either way.
+  bool mayCount(DateTime d) => balanceAsOf != null && !dateOnly(d).isAfter(dateOnly(balanceAsOf!));
+
+  /// Whether the balance was typed in after [t] (an entry's createdAt): the
+  /// bank figure replaced whatever that entry did, so editing or deleting
+  /// the entry leaves the balance alone.
+  bool typedInAfter(DateTime t) => balanceAsOf != null && balanceAsOf!.isAfter(t);
 
   CreditLine copyWith({
     String? name,
@@ -70,7 +75,7 @@ class CreditLine {
         'annual_rate': annualRate,
         'interest_method': interestMethod.name,
         'sort_order': sortOrder,
-        'balance_as_of': balanceAsOf == null ? null : isoDate(balanceAsOf!),
+        'balance_as_of': balanceAsOf?.toIso8601String(),
       };
 
   factory CreditLine.fromMap(Map<String, Object?> m) => CreditLine(

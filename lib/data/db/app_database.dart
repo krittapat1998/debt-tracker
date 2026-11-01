@@ -9,11 +9,14 @@ class AppDatabase {
 
   /// 2: spendings table. 3: credit_lines.balance_as_of and
   /// spendings.line_balance_applied (backdated entries vs typed-in balances).
-  static const _version = 3;
+  /// 4: recurring_charges table.
+  static const _version = 4;
   static const fileName = 'debt_tracker.db';
 
   /// Parents before children (backup restore inserts in this order).
-  static const tables = ['accounts', 'credit_lines', 'installment_plans', 'payments', 'spendings', 'settings'];
+  static const tables = [
+    'accounts', 'credit_lines', 'installment_plans', 'recurring_charges', 'payments', 'spendings', 'settings',
+  ];
 
   static Future<AppDatabase> open({DatabaseFactory? factory, String? path}) async {
     final f = factory ?? databaseFactory;
@@ -32,6 +35,7 @@ class AppDatabase {
             // A version 1 database just got the spendings table with this column.
             if (oldVersion == 2) batch.execute('ALTER TABLE spendings ADD COLUMN line_balance_applied REAL');
           }
+          if (oldVersion < 4) _createRecurringCharges(batch);
           await batch.commit(noResult: true);
         },
       ),
@@ -109,6 +113,7 @@ class AppDatabase {
     batch.execute('CREATE INDEX idx_payments_account ON payments(account_id, date)');
     batch.execute('CREATE INDEX idx_payments_plan ON payments(plan_id)');
     _createSpendings(batch);
+    _createRecurringCharges(batch);
     batch.execute('''
       CREATE TABLE settings (
         key TEXT PRIMARY KEY,
@@ -131,6 +136,22 @@ class AppDatabase {
         created_at TEXT NOT NULL
       )''');
     batch.execute('CREATE INDEX idx_spendings_account ON spendings(account_id, date)');
+  }
+
+  static void _createRecurringCharges(Batch batch) {
+    batch.execute('''
+      CREATE TABLE recurring_charges (
+        id TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+        credit_line_id TEXT REFERENCES credit_lines(id) ON DELETE SET NULL,
+        name TEXT NOT NULL,
+        amount REAL NOT NULL,
+        every TEXT NOT NULL,
+        next_date TEXT NOT NULL,
+        anchor_day INTEGER NOT NULL,
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL
+      )''');
   }
 
   Future<void> close() => db.close();

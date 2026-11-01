@@ -12,6 +12,7 @@ import 'package:debt_tracker/domain/models/credit_line.dart';
 import 'package:debt_tracker/domain/models/enums.dart';
 import 'package:debt_tracker/domain/models/installment_plan.dart';
 import 'package:debt_tracker/domain/models/payment.dart';
+import 'package:debt_tracker/domain/models/recurring_charge.dart';
 import 'package:debt_tracker/domain/models/spending.dart';
 import 'package:debt_tracker/ui/providers.dart';
 import 'package:debt_tracker/ui/screens/account_detail_screen.dart';
@@ -26,6 +27,7 @@ import 'package:debt_tracker/ui/screens/settings_screen.dart';
 import 'package:debt_tracker/ui/screens/sms_import_screen.dart';
 import 'package:debt_tracker/ui/screens/sms_patterns_screen.dart';
 import 'package:debt_tracker/ui/theme.dart';
+import 'package:debt_tracker/ui/widgets/common.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -43,12 +45,24 @@ class _MemorySettings implements SettingsRepository {
 /// Records spending instead of writing to a database.
 class _RecordingLedger implements LedgerService {
   final spending = <Spending>[];
+  final updated = <Spending>[];
+  final charges = <RecurringCharge>[];
+  @override
+  Future<void> saveRecurring(RecurringCharge c) async => charges.add(c);
   final alreadyInBalance = <bool?>[];
   @override
   Future<Spending> recordSpending(Spending s, {bool? alreadyInBalance}) async {
     this.alreadyInBalance.add(alreadyInBalance);
     final saved = s.copyWith(lineBalanceApplied: alreadyInBalance == true ? 0 : s.amount);
     spending.add(saved);
+    return saved;
+  }
+
+  @override
+  Future<Spending> updateSpending(Spending s, {required bool alreadyInBalance}) async {
+    this.alreadyInBalance.add(alreadyInBalance);
+    final saved = s.copyWith(lineBalanceApplied: alreadyInBalance ? 0 : s.amount);
+    updated.add(saved);
     return saved;
   }
   @override
@@ -58,7 +72,11 @@ class _RecordingLedger implements LedgerService {
 /// Sample data shaped like real use: a card with a 0% installment billed
 /// on the statement, a card with two sub-limits and a locked-in loan, and a
 /// flat-rate cash-card loan with a prepayment.
-PortfolioSummary samplePortfolio({List<Spending> spendings = const [], DateTime? ktcBalanceAsOf}) {
+PortfolioSummary samplePortfolio({
+  List<Spending> spendings = const [],
+  List<RecurringCharge> recurring = const [],
+  DateTime? ktcBalanceAsOf,
+}) {
   final today = dateOnly(DateTime.now());
   final created = today.subtract(const Duration(days: 120));
   DateTime ago(int days) => today.subtract(Duration(days: days));
@@ -94,6 +112,7 @@ PortfolioSummary samplePortfolio({List<Spending> spendings = const [], DateTime?
           prepaymentMode: PrepaymentMode.reduceTerm, note: 'โปะจากเงินเหลือ', source: PaymentSource.sms, createdAt: ago(10)),
     ],
     spendings: spendings,
+    recurring: recurring,
     today: today,
   );
 }
@@ -254,6 +273,107 @@ void main() {
     await settle(tester);
     expect(ledger.alreadyInBalance.single, isTrue);
     expect(find.text('บันทึกยอดใช้จ่าย ฿1,500.00 แล้ว · ยอดรูดบัตรรวมรายการนี้อยู่แล้ว ไม่บวกซ้ำ'), findsOneWidget);
+  });
+
+  testWidgets('tapping spending on the card page edits it', (tester) async {
+    final ledger = _RecordingLedger();
+    final today = dateOnly(DateTime.now());
+    final yesterday = today.subtract(const Duration(days: 1));
+    await pump(
+      tester,
+      const AccountDetailScreen(accountId: 'a1'),
+      ledger: ledger,
+      data: samplePortfolio(spendings: [
+        Spending(id: 's1', accountId: 'a1', creditLineId: 'l1', date: yesterday, amount: 350, lineBalanceApplied: 350,
+            note: 'ค่าอาหาร', createdAt: yesterday),
+      ]),
+    );
+    await tester.scrollUntilVisible(find.text('฿350.00 · ค่าอาหาร'), 300, scrollable: find.byType(Scrollable).first);
+    await settle(tester);
+    await tester.tap(find.text('฿350.00 · ค่าอาหาร'));
+    await settle(tester);
+
+    expect(find.text('แก้ไขยอดใช้จ่าย'), findsOneWidget);
+    expect(find.widgetWithText(TextFormField, '350'), findsOneWidget);
+    // It was added, so the switch starts off; the preview shows the result.
+    expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value, isFalse);
+    expect(find.text('ยอดรูดบัตร ฿12,000.00 → ฿12,000.00'), findsOneWidget);
+    await tester.enterText(find.widgetWithText(TextFormField, '350'), '500');
+    await settle(tester);
+    expect(find.text('ยอดรูดบัตร ฿12,000.00 → ฿12,150.00'), findsOneWidget);
+    await tester.tap(find.byType(SwitchListTile));
+    await settle(tester);
+    expect(find.text('ยอดรูดบัตร ฿12,000.00 → ฿11,650.00'), findsOneWidget);
+
+    await tester.tap(find.text('บันทึก'));
+    await settle(tester);
+    final s = ledger.updated.single;
+    expect((s.id, s.amount, s.note, s.date, s.createdAt), ('s1', 500.0, 'ค่าอาหาร', yesterday, yesterday));
+    expect(ledger.alreadyInBalance.single, isTrue);
+    expect(find.text('แก้ไขยอดใช้จ่ายแล้ว · ยอดรูดบัตร ฿11,650.00'), findsOneWidget);
+  });
+
+  testWidgets('the row menu edits too; the switch says "กรอกไว้" before any balance was typed in', (tester) async {
+    final ledger = _RecordingLedger();
+    final yesterday = dateOnly(DateTime.now()).subtract(const Duration(days: 1));
+    await pump(
+      tester,
+      const AccountDetailScreen(accountId: 'a1'),
+      ledger: ledger,
+      data: samplePortfolio(spendings: [
+        Spending(id: 's1', accountId: 'a1', creditLineId: 'l1', date: yesterday, amount: 350, lineBalanceApplied: 350,
+            createdAt: yesterday),
+      ]),
+    );
+    await tester.scrollUntilVisible(find.text('฿350.00 · ใช้จ่าย'), 300, scrollable: find.byType(Scrollable).first);
+    await settle(tester);
+    await tester.tap(find.byTooltip('แก้ไขหรือลบ'));
+    await settle(tester);
+    await tester.tap(find.text('แก้ไข'));
+    await settle(tester);
+    expect(find.text('ยอดรูดบัตรที่กรอกไว้รวมรายการนี้แล้ว'), findsOneWidget);
+  });
+
+  testWidgets('recurring charges are listed on the card page and added with a dialog', (tester) async {
+    final ledger = _RecordingLedger();
+    final today = dateOnly(DateTime.now());
+    final next = today.add(const Duration(days: 5));
+    await pump(
+      tester,
+      const AccountDetailScreen(accountId: 'a1'),
+      ledger: ledger,
+      data: samplePortfolio(recurring: [
+        RecurringCharge(id: 'r1', accountId: 'a1', creditLineId: 'l1', name: 'Netflix', amount: 419, nextDate: next,
+            anchorDay: next.day, createdAt: today),
+      ]),
+    );
+    final header = find.widgetWithText(SectionHeader, 'รายการหักประจำ (1)');
+    await tester.scrollUntilVisible(find.text('฿419.00 · Netflix'), 300, scrollable: find.byType(Scrollable).first);
+    await settle(tester);
+    expect(find.textContaining('ทุกเดือน วันที่ ${next.day}\nครั้งถัดไป ${fmtDate(next)}'), findsOneWidget);
+
+    await tester.tap(find.descendant(of: header, matching: find.text('เพิ่ม')));
+    await settle(tester);
+    expect(find.text('เพิ่มรายการหักประจำ'), findsOneWidget);
+    await tester.enterText(find.widgetWithText(TextFormField, 'ชื่อรายการ'), 'Spotify');
+    await tester.enterText(find.widgetWithText(TextFormField, 'ยอดที่หักต่อรอบ'), '149');
+    // No date yet: not saved.
+    await tester.tap(find.text('บันทึก'));
+    await settle(tester);
+    expect(ledger.charges, isEmpty);
+
+    await tester.tap(find.text('หักครั้งถัดไป'));
+    await settle(tester);
+    await tester.tap(find.text('ตกลง'));
+    await settle(tester);
+    expect(find.textContaining('หักทุกเดือน วันที่ ${today.day}'), findsOneWidget);
+    await tester.tap(find.text('บันทึก'));
+    await settle(tester);
+    final c = ledger.charges.single;
+    expect((c.accountId, c.creditLineId, c.name, c.amount, c.nextDate, c.anchorDay, c.active),
+        ('a1', 'l1', 'Spotify', 149.0, today, today.day, true));
+    expect(find.text('เพิ่ม Spotify แล้ว · บันทึกยอดของวันนี้แล้ว · ครั้งถัดไป ${fmtDate(c.following(today))}'),
+        findsOneWidget);
   });
 
   testWidgets('spending that was not added to the balance says so', (tester) async {

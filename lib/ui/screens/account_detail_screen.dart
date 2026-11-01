@@ -9,6 +9,7 @@ import '../../data/services/ledger_service.dart';
 import '../../domain/finance/installment_engine.dart';
 import '../../domain/finance/portfolio.dart';
 import '../../domain/models/credit_line.dart';
+import '../../domain/models/recurring_charge.dart';
 import '../../domain/models/enums.dart';
 import '../../domain/models/payment.dart';
 import '../../domain/models/spending.dart';
@@ -76,6 +77,7 @@ class AccountDetailScreen extends ConsumerWidget {
               _OverviewCard(a: a),
               SectionHeader(a.lines.length > 1 ? 'วงเงินย่อย (${a.lines.length})' : 'วงเงิน'),
               for (final l in a.lines) _LineTile(a: a, line: l),
+              if (a.lines.isNotEmpty) _RecurringSection(a: a),
               if (a.spendings.isNotEmpty) _SpendingSection(a: a),
               SectionHeader(
                 'รายการผ่อน',
@@ -263,7 +265,7 @@ class _QuickActions extends ConsumerWidget {
             ),
             primary: true,
           ),
-          action(Icons.add_shopping_cart, 'เพิ่มยอดใช้จ่าย', a.lines.isEmpty ? null : () => _addSpending(context, ref, a)),
+          action(Icons.add_shopping_cart, 'เพิ่มยอดใช้จ่าย', a.lines.isEmpty ? null : () => _spendingDialog(context, ref, a)),
           action(Icons.edit_note, 'อัปเดตยอดบิล', () => showStatementSheet(context, a)),
         ],
       ),
@@ -433,23 +435,37 @@ class _LineTile extends ConsumerWidget {
 }
 
 /// Adds one purchase on top of a sub-limit's balance, so the user doesn't
-/// have to work out the new total like editing the balance needs.
-Future<void> _addSpending(BuildContext context, WidgetRef ref, AccountSummary a) async {
+/// have to work out the new total like editing the balance needs. With
+/// [existing], corrects that entry instead.
+Future<void> _spendingDialog(BuildContext context, WidgetRef ref, AccountSummary a, {Spending? existing}) async {
   final label = a.account.type.revolvingLabel;
-  final amountCtl = TextEditingController();
-  final noteCtl = TextEditingController();
+  final amountCtl = TextEditingController(text: amountToField(existing?.amount));
+  final noteCtl = TextEditingController(text: existing?.note ?? '');
   final formKey = GlobalKey<FormState>();
-  var line = a.lines.first;
-  var date = DateTime.now();
-  // The typed-in balance may already have a backdated purchase; ask then.
-  bool? included; // the user's answer; null = guess from the dates
-  bool ask() => line.mayCount(date);
-  bool skip() => ask() && (included ?? line.alreadyCounts(date));
+  final today = dateOnly(DateTime.now());
+  var line = a.lines.firstWhere((l) => l.id == existing?.creditLineId, orElse: () => a.lines.first);
+  var date = existing?.date ?? DateTime.now();
+  bool? included; // the user's answer to "already in the balance"; null = guess
+  bool sameLine() => existing != null && line.id == existing.creditLineId;
+  // A balance typed in from the bank after the entry was recorded replaced
+  // whatever it did, so editing it can't change the balance.
+  bool replacedByBank() => sameLine() && line.typedInAfter(existing!.createdAt);
+  // Anything backdated may already be in a balance copied from the bank app.
+  bool ask() => !replacedByBank() && (existing != null || line.mayCount(date) || dateOnly(date).isBefore(today));
+  bool skip() =>
+      ask() && (included ?? (sameLine() ? existing!.lineBalanceApplied < 0.005 : line.alreadyCounts(date)));
+  // The sub-limit balance once saved.
+  double after() {
+    if (replacedByBank()) return line.balance;
+    final back = sameLine() ? existing!.lineBalanceApplied : 0.0;
+    return math.max(0.0, line.balance - back) + (skip() ? 0 : parseAmount(amountCtl.text) ?? 0);
+  }
+
   final saved = await showDialog<bool>(
     context: context,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setState) => AlertDialog(
-        title: const Text('เพิ่มยอดใช้จ่าย'),
+        title: Text(existing == null ? 'เพิ่มยอดใช้จ่าย' : 'แก้ไขยอดใช้จ่าย'),
         content: SingleChildScrollView(
           child: Form(
             key: formKey,
@@ -470,7 +486,14 @@ Future<void> _addSpending(BuildContext context, WidgetRef ref, AccountSummary a)
                   ),
                   const SizedBox(height: 12),
                 ],
-                AmountField(controller: amountCtl, label: 'ยอดที่ใช้', required: true, allowZero: false, autofocus: true),
+                AmountField(
+                  controller: amountCtl,
+                  label: 'ยอดที่ใช้',
+                  required: true,
+                  allowZero: false,
+                  autofocus: existing == null,
+                  onChanged: (_) => setState(() {}),
+                ),
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: noteCtl,
@@ -490,15 +513,21 @@ Future<void> _addSpending(BuildContext context, WidgetRef ref, AccountSummary a)
                     contentPadding: EdgeInsets.zero,
                     value: skip(),
                     onChanged: (v) => setState(() => included = v),
-                    title: Text('$labelที่แก้ไว้เมื่อ ${fmtDate(line.balanceAsOf!)} รวมรายการนี้แล้ว'),
+                    title: Text(line.balanceAsOf == null
+                        ? '$labelที่กรอกไว้รวมรายการนี้แล้ว'
+                        : '$labelที่แก้ไว้เมื่อ ${fmtDate(line.balanceAsOf!)} รวมรายการนี้แล้ว'),
                     subtitle: const Text('เปิดไว้ = เก็บเข้าประวัติอย่างเดียว ไม่บวกซ้ำ'),
                   ),
                 const SizedBox(height: 8),
                 Text(
-                  skip()
-                      ? 'ไม่บวกเพิ่ม — $labelยังเป็น ${fmtMoney(line.balance)}'
-                      : 'บวกเพิ่มจาก$labelตอนนี้ ${fmtMoney(line.balance)} '
-                          '— ถ้าแบ่งจ่ายเป็นงวด ให้ใช้ "เพิ่มรายการผ่อน" แทน',
+                  replacedByBank()
+                      ? '$labelแก้ตามแอพธนาคารหลังบันทึกรายการนี้แล้ว — แก้รายการนี้จะไม่เปลี่ยน$label (${fmtMoney(line.balance)})'
+                      : existing != null
+                          ? '$label ${fmtMoney(line.balance)} → ${fmtMoney(after())}'
+                          : skip()
+                              ? 'ไม่บวกเพิ่ม — $labelยังเป็น ${fmtMoney(line.balance)}'
+                              : 'บวกเพิ่มจาก$labelตอนนี้ ${fmtMoney(line.balance)} '
+                                  '— ถ้าแบ่งจ่ายเป็นงวด ให้ใช้ "เพิ่มรายการผ่อน" แทน',
                   style: const TextStyle(fontSize: 12),
                 ),
               ],
@@ -520,26 +549,263 @@ Future<void> _addSpending(BuildContext context, WidgetRef ref, AccountSummary a)
   if (saved != true) return;
   final amount = parseAmount(amountCtl.text)!;
   final note = noteCtl.text.trim();
-  final s = await ref.read(ledgerProvider).recordSpending(
-        Spending(
-          id: newId(),
-          accountId: line.accountId,
-          creditLineId: line.id,
-          date: date,
-          amount: amount,
-          note: note.isEmpty ? null : note,
-          createdAt: DateTime.now(),
-        ),
-        alreadyInBalance: skip(),
-      );
+  final balanceAfter = after();
+  final draft = Spending(
+    id: existing?.id ?? newId(),
+    accountId: line.accountId,
+    creditLineId: line.id,
+    date: date,
+    amount: amount,
+    note: note.isEmpty ? null : note,
+    source: existing?.source ?? PaymentSource.manual,
+    createdAt: existing?.createdAt ?? DateTime.now(),
+  );
+  final ledger = ref.read(ledgerProvider);
+  final s = existing == null
+      ? await ledger.recordSpending(draft, alreadyInBalance: skip())
+      : await ledger.updateSpending(draft, alreadyInBalance: skip());
   ref.refreshData();
   if (context.mounted) {
     showSnack(
       context,
-      s.lineBalanceApplied > 0
-          ? 'เพิ่มยอดใช้จ่าย ${fmtMoney(amount)} แล้ว · $label ${fmtMoney(line.balance + amount)}'
-          : 'บันทึกยอดใช้จ่าย ${fmtMoney(amount)} แล้ว · $labelรวมรายการนี้อยู่แล้ว ไม่บวกซ้ำ',
+      existing != null
+          ? 'แก้ไขยอดใช้จ่ายแล้ว · $label ${fmtMoney(balanceAfter)}'
+          : s.lineBalanceApplied > 0
+              ? 'เพิ่มยอดใช้จ่าย ${fmtMoney(amount)} แล้ว · $label ${fmtMoney(balanceAfter)}'
+              : 'บันทึกยอดใช้จ่าย ${fmtMoney(amount)} แล้ว · $labelรวมรายการนี้อยู่แล้ว ไม่บวกซ้ำ',
     );
+  }
+}
+
+/// Card charges that repeat (Netflix and the like); each time one comes due
+/// it is recorded as spending.
+class _RecurringSection extends ConsumerWidget {
+  const _RecurringSection({required this.a});
+  final AccountSummary a;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionHeader(
+          a.recurring.isEmpty ? 'รายการหักประจำ' : 'รายการหักประจำ (${a.recurring.length})',
+          trailing: TextButton.icon(
+            icon: const Icon(Icons.add),
+            label: const Text('เพิ่ม'),
+            onPressed: () => _recurringDialog(context, ref, a),
+          ),
+        ),
+        if (a.recurring.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+            child: Text('ยังไม่มี — เช่น Netflix หรือ Spotify ที่หักบัตรทุกเดือน แอพจะบันทึกเป็นยอดใช้จ่ายให้เองทุกรอบ'),
+          ),
+        for (final c in a.recurring) _RecurringTile(a: a, charge: c),
+      ],
+    );
+  }
+}
+
+String _schedule(RecurrenceInterval interval, int day, int month) => interval == RecurrenceInterval.monthly
+    ? 'ทุกเดือน วันที่ $day'
+    : 'ทุกปี วันที่ $day ${thaiMonthsLong[month - 1]}';
+
+class _RecurringTile extends ConsumerWidget {
+  const _RecurringTile({required this.a, required this.charge});
+  final AccountSummary a;
+  final RecurringCharge charge;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final c = charge;
+    String? lineName;
+    if (a.lines.length > 1) {
+      for (final l in a.lines) {
+        if (l.id == c.creditLineId) lineName = l.name;
+      }
+    }
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+        child: const Icon(Icons.autorenew, size: 20),
+      ),
+      title: Text('${fmtMoney(c.amount)} · ${c.name}'),
+      subtitle: Text([
+        [_schedule(c.interval, c.anchorDay, c.nextDate.month), ?lineName].join(' · '),
+        c.active ? 'ครั้งถัดไป ${fmtDate(c.nextDate)}' : 'หยุดหักไว้',
+      ].join('\n')),
+      isThreeLine: true,
+      trailing: PopupMenuButton<String>(
+        tooltip: 'ตัวเลือก ${c.name}',
+        onSelected: (v) {
+          if (v == 'edit') {
+            _recurringDialog(context, ref, a, existing: c);
+          } else if (v == 'pause') {
+            _togglePause(context, ref);
+          } else {
+            _delete(context, ref);
+          }
+        },
+        itemBuilder: (_) => [
+          const PopupMenuItem(value: 'edit', child: Text('แก้ไข')),
+          PopupMenuItem(value: 'pause', child: Text(c.active ? 'หยุดหักชั่วคราว' : 'เริ่มหักต่อ')),
+          const PopupMenuItem(value: 'delete', child: Text('ลบ')),
+        ],
+      ),
+      onTap: () => _recurringDialog(context, ref, a, existing: c),
+    );
+  }
+
+  /// Resuming skips the charges that fell while it was paused.
+  Future<void> _togglePause(BuildContext context, WidgetRef ref) async {
+    final today = dateOnly(DateTime.now());
+    var next = charge.nextDate;
+    while (next.isBefore(today)) {
+      next = charge.following(next);
+    }
+    final updated = charge.active ? charge.copyWith(active: false) : charge.copyWith(active: true, nextDate: next);
+    await ref.read(ledgerProvider).saveRecurring(updated);
+    ref.refreshData();
+    if (context.mounted) {
+      showSnack(
+        context,
+        updated.active
+            ? 'เริ่มหัก ${charge.name} ต่อ · ครั้งถัดไป ${fmtDate(next)}'
+            : 'หยุดหัก ${charge.name} ไว้ · จะไม่บันทึกจนกว่าจะเริ่มหักต่อ',
+      );
+    }
+  }
+
+  Future<void> _delete(BuildContext context, WidgetRef ref) async {
+    final ok = await confirmDialog(
+      context,
+      title: 'ลบ ${charge.name}?',
+      message: 'แอพจะหยุดบันทึกรายการนี้ ยอดใช้จ่ายที่บันทึกไปแล้วยังอยู่ในประวัติ',
+      confirmLabel: 'ลบ',
+      destructive: true,
+    );
+    if (!ok) return;
+    await ref.read(ledgerProvider).deleteRecurring(charge.id);
+    ref.refreshData();
+  }
+}
+
+/// Sets up (or, with [existing], changes) a charge that repeats on the card.
+/// Recording starts from the next charge: earlier ones are already in the
+/// bank's figures or were added by hand.
+Future<void> _recurringDialog(BuildContext context, WidgetRef ref, AccountSummary a, {RecurringCharge? existing}) async {
+  final nameCtl = TextEditingController(text: existing?.name ?? '');
+  final amountCtl = TextEditingController(text: amountToField(existing?.amount));
+  final formKey = GlobalKey<FormState>();
+  final today = dateOnly(DateTime.now());
+  var line = a.lines.firstWhere((l) => l.id == existing?.creditLineId, orElse: () => a.lines.first);
+  var interval = existing?.interval ?? RecurrenceInterval.monthly;
+  // A paused charge can sit in the past; the picker starts at today.
+  DateTime? next = existing == null ? null : (existing.nextDate.isBefore(today) ? today : existing.nextDate);
+  var dateMissing = false;
+  final saved = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setState) => AlertDialog(
+        title: Text(existing == null ? 'เพิ่มรายการหักประจำ' : 'แก้ไขรายการหักประจำ'),
+        content: SingleChildScrollView(
+          child: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextFormField(
+                  controller: nameCtl,
+                  autofocus: existing == null,
+                  decoration: const InputDecoration(labelText: 'ชื่อรายการ', hintText: 'เช่น Netflix'),
+                  validator: (v) => v == null || v.trim().isEmpty ? 'กรุณากรอก' : null,
+                ),
+                const SizedBox(height: 12),
+                AmountField(controller: amountCtl, label: 'ยอดที่หักต่อรอบ', required: true, allowZero: false),
+                if (a.lines.length > 1) ...[
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<CreditLine>(
+                    initialValue: line,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'หักจากวงเงิน'),
+                    items: [for (final l in a.lines) DropdownMenuItem(value: l, child: Text(l.name))],
+                    onChanged: (l) => setState(() => line = l ?? line),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                SegmentedButton<RecurrenceInterval>(
+                  segments: [
+                    for (final i in RecurrenceInterval.values) ButtonSegment(value: i, label: Text(i.label)),
+                  ],
+                  selected: {interval},
+                  onSelectionChanged: (v) => setState(() => interval = v.first),
+                ),
+                const SizedBox(height: 12),
+                DateField(
+                  value: next,
+                  label: 'หักครั้งถัดไป',
+                  firstDate: today,
+                  onChanged: (d) => setState(() {
+                    next = d ?? next;
+                    dateMissing = false;
+                  }),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  next == null
+                      ? 'เลือกวันที่บัตรจะถูกหักครั้งถัดไป'
+                      : 'หัก${_schedule(interval, next!.day, next!.month)}'
+                          '${interval == RecurrenceInterval.monthly && next!.day > 28 ? ' (เดือนที่ไม่มีวันนี้ หักวันสุดท้ายของเดือน)' : ''}'
+                          ' · แอพจะบันทึกเป็นยอดใช้จ่ายให้เองตั้งแต่ ${fmtDate(next!)} รอบที่ผ่านมาแล้วไม่บันทึกย้อนหลัง',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: dateMissing ? Theme.of(ctx).colorScheme.error : null,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ยกเลิก')),
+          FilledButton(
+            onPressed: () {
+              final ok = formKey.currentState!.validate();
+              setState(() => dateMissing = next == null);
+              if (ok && next != null) Navigator.pop(ctx, true);
+            },
+            child: const Text('บันทึก'),
+          ),
+        ],
+      ),
+    ),
+  );
+  if (saved != true) return;
+  final date = next!;
+  final name = nameCtl.text.trim();
+  final charge = RecurringCharge(
+    id: existing?.id ?? newId(),
+    accountId: a.account.id,
+    creditLineId: line.id,
+    name: name,
+    amount: parseAmount(amountCtl.text)!,
+    interval: interval,
+    nextDate: date,
+    // Unchanged date: keep the day it really falls on (e.g. 31 after February).
+    anchorDay: existing != null && date == existing.nextDate ? existing.anchorDay : date.day,
+    active: existing?.active ?? true,
+    createdAt: existing?.createdAt ?? DateTime.now(),
+  );
+  await ref.read(ledgerProvider).saveRecurring(charge);
+  // Recording a charge due today happens on this refresh.
+  ref.refreshData();
+  if (context.mounted) {
+    final when = date.isAfter(today)
+        ? 'หักครั้งถัดไป ${fmtDate(date)}'
+        : 'บันทึกยอดของวันนี้แล้ว · ครั้งถัดไป ${fmtDate(charge.following(date))}';
+    showSnack(context, '${existing == null ? 'เพิ่ม' : 'แก้ไข'} $name แล้ว · $when');
   }
 }
 
@@ -607,22 +873,37 @@ class SpendingTile extends ConsumerWidget {
       title: Text('${fmtMoney(s.amount)} · ${s.note ?? 'ใช้จ่าย'}'),
       subtitle: Text([fmtDate(s.date), if (details.isNotEmpty) details.join(' · ')].join('\n')),
       isThreeLine: details.isNotEmpty,
-      trailing: IconButton(
-        icon: const Icon(Icons.delete_outline),
-        tooltip: 'ลบ',
-        onPressed: () => _delete(context, ref),
+      trailing: PopupMenuButton<bool>(
+        tooltip: 'แก้ไขหรือลบ',
+        onSelected: (edit) => edit ? _edit(context, ref) : _delete(context, ref),
+        itemBuilder: (_) => [
+          if (summary.lines.isNotEmpty) const PopupMenuItem(value: true, child: Text('แก้ไข')),
+          const PopupMenuItem(value: false, child: Text('ลบ')),
+        ],
       ),
-      onTap: onTap,
+      onTap: onTap ?? () => _edit(context, ref),
       onLongPress: () => _delete(context, ref),
     );
   }
 
+  void _edit(BuildContext context, WidgetRef ref) {
+    if (summary.lines.isNotEmpty) _spendingDialog(context, ref, summary, existing: spending);
+  }
+
   Future<void> _delete(BuildContext context, WidgetRef ref) async {
+    CreditLine? line;
+    for (final l in summary.lines) {
+      if (l.id == spending.creditLineId) line = l;
+    }
+    final effect = spending.lineBalanceApplied <= 0
+        ? 'ยอดคงค้างไม่เปลี่ยน เพราะตอนบันทึกไม่ได้บวกเข้าไป'
+        : line != null && line.typedInAfter(spending.createdAt)
+            ? 'ยอดคงค้างไม่เปลี่ยน เพราะแก้ยอดตามแอพธนาคารหลังบันทึกรายการนี้แล้ว'
+            : 'ยอดนี้จะถูกหักออกจากยอดคงค้าง';
     final ok = await confirmDialog(
       context,
       title: 'ลบรายการใช้จ่ายนี้?',
-      message: '${fmtMoney(spending.amount)} เมื่อ ${fmtDate(spending.date)} — '
-          '${spending.lineBalanceApplied > 0 ? 'ยอดนี้จะถูกหักออกจากยอดคงค้าง' : 'ยอดคงค้างไม่เปลี่ยน เพราะตอนบันทึกไม่ได้บวกเข้าไป'}',
+      message: '${fmtMoney(spending.amount)} เมื่อ ${fmtDate(spending.date)} — $effect',
       confirmLabel: 'ลบ',
       destructive: true,
     );

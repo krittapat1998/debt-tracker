@@ -66,7 +66,10 @@ enum PrepaymentMode {
 enum PaymentSource {
   manual('กรอกเอง'),
   sms('SMS'),
-  email('อีเมล');
+  email('อีเมล'),
+
+  /// Recorded by a recurring charge (e.g. Netflix every month).
+  recurring('รายการหักประจำ');
 
   const PaymentSource(this.label);
   final String label;
@@ -74,4 +77,18 @@ enum PaymentSource {
   static PaymentSource fromName(String? name) =>
       PaymentSource.values.firstWhere((e) => e.name == name,
           orElse: () => PaymentSource.manual);
+}
+
+/// How often a recurring card charge repeats.
+enum RecurrenceInterval {
+  monthly('ทุกเดือน', 1),
+  yearly('ทุกปี', 12);
+
+  const RecurrenceInterval(this.label, this.months);
+  final String label;
+  final int months;
+
+  static RecurrenceInterval fromName(String? name) =>
+      RecurrenceInterval.values.firstWhere((e) => e.name == name,
+          orElse: () => RecurrenceInterval.monthly);
 }
