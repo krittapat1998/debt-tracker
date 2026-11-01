@@ -7,8 +7,9 @@ class AppDatabase {
 
   final Database db;
 
-  /// 2: spendings table.
-  static const _version = 2;
+  /// 2: spendings table. 3: credit_lines.balance_as_of and
+  /// spendings.line_balance_applied (backdated entries vs typed-in balances).
+  static const _version = 3;
   static const fileName = 'debt_tracker.db';
 
   /// Parents before children (backup restore inserts in this order).
@@ -26,6 +27,11 @@ class AppDatabase {
         onUpgrade: (db, oldVersion, _) async {
           final batch = db.batch();
           if (oldVersion < 2) _createSpendings(batch);
+          if (oldVersion < 3) {
+            batch.execute('ALTER TABLE credit_lines ADD COLUMN balance_as_of TEXT');
+            // A version 1 database just got the spendings table with this column.
+            if (oldVersion == 2) batch.execute('ALTER TABLE spendings ADD COLUMN line_balance_applied REAL');
+          }
           await batch.commit(noResult: true);
         },
       ),
@@ -62,7 +68,8 @@ class AppDatabase {
         balance REAL NOT NULL DEFAULT 0,
         annual_rate REAL NOT NULL DEFAULT 0,
         interest_method TEXT NOT NULL,
-        sort_order INTEGER NOT NULL DEFAULT 0
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        balance_as_of TEXT
       )''');
     batch.execute('''
       CREATE TABLE installment_plans (
@@ -120,6 +127,7 @@ class AppDatabase {
         amount REAL NOT NULL,
         note TEXT,
         source TEXT NOT NULL DEFAULT 'manual',
+        line_balance_applied REAL,
         created_at TEXT NOT NULL
       )''');
     batch.execute('CREATE INDEX idx_spendings_account ON spendings(account_id, date)');

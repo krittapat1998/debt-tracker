@@ -48,6 +48,10 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
   PaymentType _type = PaymentType.minimum;
   PrepaymentMode _mode = PrepaymentMode.reduceTerm;
   bool _amountTouched = false;
+
+  /// Whether the typed-in balance already has this (backdated) payment;
+  /// null = guess from the dates.
+  bool? _included;
   bool _initialized = false;
   bool _saving = false;
 
@@ -88,6 +92,11 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
     }
     return null;
   }
+
+  /// The balance was typed in from the bank after this payment, so it
+  /// should not be taken off again.
+  bool _skipBalance(CreditLine? line) =>
+      line != null && line.mayCount(_date) && (_included ?? line.alreadyCounts(_date));
 
   CreditLine? _line(AccountSummary a) {
     if (_target == null || !_target!.startsWith('line:')) return null;
@@ -136,22 +145,30 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
     setState(() => _saving = true);
     final plan = _plan(a);
     final line = _line(a);
-    await ref.read(ledgerProvider).recordPayment(Payment(
-          id: newId(),
-          accountId: a.account.id,
-          creditLineId: line?.id ?? plan?.plan.creditLineId,
-          planId: plan?.plan.id,
-          date: _date,
-          amount: parseAmount(_amount.text)!,
-          type: _type,
-          prepaymentMode: _type == PaymentType.extra && plan != null ? _mode : null,
-          note: _note.text.trim().isEmpty ? null : _note.text.trim(),
-          createdAt: DateTime.now(),
-        ));
+    final skip = _skipBalance(line);
+    await ref.read(ledgerProvider).recordPayment(
+          Payment(
+            id: newId(),
+            accountId: a.account.id,
+            creditLineId: line?.id ?? plan?.plan.creditLineId,
+            planId: plan?.plan.id,
+            date: _date,
+            amount: parseAmount(_amount.text)!,
+            type: _type,
+            prepaymentMode: _type == PaymentType.extra && plan != null ? _mode : null,
+            note: _note.text.trim().isEmpty ? null : _note.text.trim(),
+            createdAt: DateTime.now(),
+          ),
+          alreadyInBalance: skip,
+        );
     ref.refreshData();
     if (!mounted) return;
     Navigator.pop(context);
-    showSnack(context, 'บันทึกการจ่าย ${fmtMoney(parseAmount(_amount.text)!)} แล้ว');
+    showSnack(
+      context,
+      'บันทึกการจ่าย ${fmtMoney(parseAmount(_amount.text)!)} แล้ว'
+      '${skip ? ' · ${a.account.type.revolvingLabel}หักการจ่ายนี้อยู่แล้ว ไม่หักซ้ำ' : ''}',
+    );
   }
 
   @override
@@ -178,7 +195,10 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
                 DateField(
                   value: _date,
                   label: 'วันที่จ่าย',
-                  onChanged: (d) => setState(() => _date = d ?? _date),
+                  onChanged: (d) => setState(() {
+                    _date = d ?? _date;
+                    _included = null;
+                  }),
                 ),
                 formGap,
                 DropdownButtonFormField<String>(
@@ -193,6 +213,7 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
                     final next = s.byId(v!)!;
                     _target = _defaultTarget(next);
                     _type = _allowedTypes(next).first;
+                    _included = null;
                     _amountTouched = false;
                     _suggestAmount(next);
                   }),
@@ -212,10 +233,21 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
                   onChanged: (v) => setState(() {
                     _target = v;
                     _type = _allowedTypes(a).first;
+                    _included = null;
                     _amountTouched = false;
                     _suggestAmount(a);
                   }),
                 ),
+                if (line != null && line.mayCount(_date))
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: _skipBalance(line),
+                    onChanged: (v) => setState(() => _included = v),
+                    title: Text(
+                      '${a.account.type.revolvingLabel}ที่แก้ไว้เมื่อ ${fmtDate(line.balanceAsOf!)} หักการจ่ายนี้แล้ว',
+                    ),
+                    subtitle: const Text('เปิดไว้ = นับเข้าบิลอย่างเดียว ไม่หักยอดซ้ำ'),
+                  ),
                 formGap,
                 Text('ประเภท', style: Theme.of(context).textTheme.labelLarge),
                 const SizedBox(height: 6),
@@ -264,7 +296,16 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
                   ),
                 ],
                 formGap,
-                _ImpactPreview(account: a, plan: plan, line: line, type: _type, amount: amount, mode: _mode, date: _date),
+                _ImpactPreview(
+                  account: a,
+                  plan: plan,
+                  line: line,
+                  type: _type,
+                  amount: amount,
+                  mode: _mode,
+                  date: _date,
+                  balanceUnchanged: _skipBalance(line),
+                ),
                 formGap,
                 TextFormField(
                   controller: _note,
@@ -298,6 +339,7 @@ class _ImpactPreview extends StatelessWidget {
     required this.amount,
     required this.mode,
     required this.date,
+    this.balanceUnchanged = false,
   });
 
   final AccountSummary account;
@@ -307,6 +349,9 @@ class _ImpactPreview extends StatelessWidget {
   final double amount;
   final PrepaymentMode mode;
   final DateTime date;
+
+  /// The typed-in balance already has this payment.
+  final bool balanceUnchanged;
 
   @override
   Widget build(BuildContext context) {
@@ -341,13 +386,16 @@ class _ImpactPreview extends StatelessWidget {
         }
       }
     } else if (line != null) {
-      final after = (line!.balance - amount).clamp(0.0, double.infinity);
-      rows.add(InfoRow('ยอดคงค้าง ${line!.name}', '${fmtMoney(line!.balance)} → ${fmtMoney(after)}'));
+      final after = balanceUnchanged ? line!.balance : (line!.balance - amount).clamp(0.0, double.infinity);
+      rows.add(InfoRow(
+        'ยอดคงค้าง ${line!.name}',
+        balanceUnchanged ? '${fmtMoney(after)} (ไม่เปลี่ยน)' : '${fmtMoney(line!.balance)} → ${fmtMoney(after)}',
+      ));
       if (account.account.minimumPayment > 0) {
         rows.add(InfoRow('ขั้นต่ำคงเหลือหลังจ่าย',
             fmtMoney((account.minimumOutstanding - amount).clamp(0.0, double.infinity))));
       }
-      if (line!.annualRate > 0) {
+      if (line!.annualRate > 0 && !balanceUnchanged) {
         rows.add(InfoRow('ดอกเบี้ยที่ลดลงต่อเดือน (ประมาณ)',
             fmtMoney((line!.balance - after) * line!.annualRate / 1200), valueColor: cs.positive));
       }

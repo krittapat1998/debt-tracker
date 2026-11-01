@@ -1,3 +1,4 @@
+import '../../core/date_utils.dart';
 import 'enums.dart';
 
 /// A sub-limit (วงเงินย่อย) inside an account, with its own rate and balance.
@@ -13,6 +14,7 @@ class CreditLine {
     required this.annualRate,
     this.interestMethod = InterestMethod.reducing,
     this.sortOrder = 0,
+    this.balanceAsOf,
   });
 
   final String id;
@@ -26,6 +28,17 @@ class CreditLine {
   final InterestMethod interestMethod;
   final int sortOrder;
 
+  /// Day [balance] was last typed in to match the bank. Spending and
+  /// payments dated before it are already counted in [balance].
+  final DateTime? balanceAsOf;
+
+  /// Whether something dated [d] is already in [balance].
+  bool alreadyCounts(DateTime d) => balanceAsOf != null && dateOnly(d).isBefore(balanceAsOf!);
+
+  /// Whether [d] is on or before [balanceAsOf], so the typed-in balance may
+  /// already include it. The same day can go either way, so the user decides.
+  bool mayCount(DateTime d) => balanceAsOf != null && !dateOnly(d).isAfter(balanceAsOf!);
+
   CreditLine copyWith({
     String? name,
     double? creditLimit,
@@ -33,6 +46,7 @@ class CreditLine {
     double? annualRate,
     InterestMethod? interestMethod,
     int? sortOrder,
+    DateTime? balanceAsOf,
   }) {
     return CreditLine(
       id: id,
@@ -43,6 +57,7 @@ class CreditLine {
       annualRate: annualRate ?? this.annualRate,
       interestMethod: interestMethod ?? this.interestMethod,
       sortOrder: sortOrder ?? this.sortOrder,
+      balanceAsOf: balanceAsOf ?? this.balanceAsOf,
     );
   }
 
@@ -55,6 +70,7 @@ class CreditLine {
         'annual_rate': annualRate,
         'interest_method': interestMethod.name,
         'sort_order': sortOrder,
+        'balance_as_of': balanceAsOf == null ? null : isoDate(balanceAsOf!),
       };
 
   factory CreditLine.fromMap(Map<String, Object?> m) => CreditLine(
@@ -66,5 +82,6 @@ class CreditLine {
         annualRate: (m['annual_rate'] as num?)?.toDouble() ?? 0,
         interestMethod: InterestMethod.fromName(m['interest_method'] as String?),
         sortOrder: (m['sort_order'] as num?)?.toInt() ?? 0,
+        balanceAsOf: parseIsoDate(m['balance_as_of']),
       );
 }
