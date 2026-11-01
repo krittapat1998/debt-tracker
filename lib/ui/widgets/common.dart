@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/formatters.dart';
+import '../../domain/finance/portfolio.dart';
 import '../../domain/models/enums.dart';
 import '../theme.dart';
 
@@ -45,7 +46,8 @@ class SectionHeader extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                     )),
           ),
-          ?trailing,
+          // Long trailing text wraps instead of pushing the row off screen.
+          if (trailing != null) ConstrainedBox(constraints: const BoxConstraints(maxWidth: 240), child: trailing),
         ],
       ),
     );
@@ -112,25 +114,41 @@ class InfoRow extends StatelessWidget {
   }
 }
 
+/// Annual rate in plain words, e.g. "ดอก 16%/ปี", "ดอก flat 15%/ปี", "ไม่มีดอก".
 class RateBadge extends StatelessWidget {
-  const RateBadge({super.key, required this.rate, this.method, this.highlight = false});
+  const RateBadge({super.key, required this.rate, this.method, this.highlight = false, this.prefix = 'ดอก'});
   final double rate;
   final InterestMethod? method;
   final bool highlight;
+  final String prefix;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final bg = highlight ? cs.errorContainer : cs.secondaryContainer;
     final fg = highlight ? cs.onErrorContainer : cs.onSecondaryContainer;
+    final flat = method == InterestMethod.flat ? ' flat' : '';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8)),
       child: Text(
-        method == null ? '${fmtPercent(rate)}/ปี' : '${fmtPercent(rate)} ${method!.shortLabel}',
+        rate < 0.005 ? 'ไม่มีดอก' : '$prefix$flat ${fmtRate(rate)}/ปี',
         style: Theme.of(context).textTheme.labelMedium?.copyWith(color: fg, fontWeight: FontWeight.w600),
       ),
     );
+  }
+}
+
+/// An account's highest rate; says "สูงสุด" when its balances carry different rates.
+class AccountRateBadge extends StatelessWidget {
+  const AccountRateBadge({super.key, required this.a, this.highlight = false});
+  final AccountSummary a;
+  final bool highlight;
+
+  @override
+  Widget build(BuildContext context) {
+    final rates = {for (final d in a.debtItems) d.effectiveRate.toStringAsFixed(2)};
+    return RateBadge(rate: a.topRate, highlight: highlight, prefix: rates.length > 1 ? 'ดอกสูงสุด' : 'ดอก');
   }
 }
 

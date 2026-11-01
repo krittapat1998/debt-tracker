@@ -231,6 +231,30 @@ void main() {
       expect(s.mostExpensive!.account.id, 'high');
     });
 
+    test('byDueDate puts overdue first and accounts with nothing due last', () {
+      final s = PortfolioSummary.build(
+        accounts: [
+          account('nothing'),
+          account('later', dueDay: 20),
+          account('overdue', min: 500, stmt: 5000, stmtDate: DateTime(2026, 10, 1), dueDay: 25),
+          account('soon', dueDay: 5),
+        ],
+        lines: [
+          line('n', 'nothing', rate: 30),
+          line('l', 'later', balance: 1000, rate: 28),
+          line('o', 'overdue', balance: 5000, rate: 10),
+          line('s', 'soon', balance: 1000, rate: 12),
+        ],
+        plans: const [],
+        payments: const [],
+        today: today,
+      );
+      expect(s.byDueDate.map((a) => a.account.id), ['overdue', 'soon', 'later', 'nothing']);
+      // The rate order (and the most expensive pick) is unchanged.
+      expect(s.accounts.first.account.id, 'nothing');
+      expect(s.mostExpensive!.account.id, 'later');
+    });
+
     test('avalanche recommendation skips balances still in lock-in', () {
       final s = PortfolioSummary.build(
         accounts: [account('a'), account('b')],

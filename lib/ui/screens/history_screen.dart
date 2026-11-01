@@ -6,11 +6,22 @@ import '../../core/formatters.dart';
 import '../../domain/finance/portfolio.dart';
 import '../../domain/models/enums.dart';
 import '../../domain/models/payment.dart';
+import '../../domain/models/spending.dart';
 import '../providers.dart';
 import '../widgets/common.dart';
 import 'account_detail_screen.dart';
 
-/// All payments across accounts, grouped by month.
+enum _Kind { all, payments, spendings }
+
+/// One history row: a payment or a spending.
+typedef _Entry = ({AccountSummary a, Payment? payment, Spending? spending});
+
+extension on _Entry {
+  DateTime get date => payment?.date ?? spending!.date;
+  DateTime get createdAt => payment?.createdAt ?? spending!.createdAt;
+}
+
+/// Payments and spending across accounts, grouped by month.
 class HistoryScreen extends ConsumerStatefulWidget {
   const HistoryScreen({super.key});
 
@@ -20,25 +31,43 @@ class HistoryScreen extends ConsumerStatefulWidget {
 
 class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   String? _accountId;
+  var _kind = _Kind.all;
 
   @override
   Widget build(BuildContext context) {
     final portfolio = ref.watch(portfolioProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('ประวัติการจ่าย')),
+      appBar: AppBar(title: const Text('ประวัติ')),
       body: AsyncBody(
         value: portfolio,
         builder: (s) {
-          final entries = <(Payment, AccountSummary)>[
+          final entries = <_Entry>[
             for (final a in s.accounts)
-              if (_accountId == null || a.account.id == _accountId)
-                for (final p in a.payments) (p, a),
+              if (_accountId == null || a.account.id == _accountId) ...[
+                if (_kind != _Kind.spendings)
+                  for (final p in a.payments) (a: a, payment: p, spending: null),
+                if (_kind != _Kind.payments)
+                  for (final sp in a.spendings) (a: a, payment: null, spending: sp),
+              ],
           ]..sort((x, y) {
-              final c = y.$1.date.compareTo(x.$1.date);
-              return c != 0 ? c : y.$1.createdAt.compareTo(x.$1.createdAt);
+              final c = y.date.compareTo(x.date);
+              return c != 0 ? c : y.createdAt.compareTo(x.createdAt);
             });
 
           final children = <Widget>[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: SegmentedButton<_Kind>(
+                showSelectedIcon: false,
+                segments: const [
+                  ButtonSegment(value: _Kind.all, label: Text('ทั้งหมด')),
+                  ButtonSegment(value: _Kind.payments, label: Text('การจ่าย')),
+                  ButtonSegment(value: _Kind.spendings, label: Text('ยอดใช้จ่าย')),
+                ],
+                selected: {_kind},
+                onSelectionChanged: (v) => setState(() => _kind = v.single),
+              ),
+            ),
             SizedBox(
               height: 52,
               child: ListView(
@@ -48,7 +77,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                   Padding(
                     padding: const EdgeInsets.only(right: 8),
                     child: ChoiceChip(
-                      label: const Text('ทั้งหมด'),
+                      label: const Text('ทุกบัตร'),
                       selected: _accountId == null,
                       onSelected: (_) => setState(() => _accountId = null),
                     ),
@@ -68,38 +97,45 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
           ];
 
           if (entries.isEmpty) {
-            children.add(const Padding(
-              padding: EdgeInsets.only(top: 48),
-              child: EmptyState(
-                icon: Icons.receipt_long_outlined,
-                title: 'ยังไม่มีประวัติการจ่าย',
-                message: 'กด "บันทึกการจ่าย" ที่หน้าภาพรวมทุกครั้งที่โอนเงินจ่ายบัตร/สินเชื่อ',
-              ),
+            children.add(Padding(
+              padding: const EdgeInsets.only(top: 48),
+              child: switch (_kind) {
+                _Kind.all => const EmptyState(
+                    icon: Icons.receipt_long_outlined,
+                    title: 'ยังไม่มีประวัติ',
+                    message: 'การจ่ายและยอดใช้จ่ายที่บันทึกไว้จะแสดงที่นี่',
+                  ),
+                _Kind.payments => const EmptyState(
+                    icon: Icons.receipt_long_outlined,
+                    title: 'ยังไม่มีประวัติการจ่าย',
+                    message: 'กด "บันทึกการจ่าย" ทุกครั้งที่โอนเงินจ่ายบัตร/สินเชื่อ',
+                  ),
+                _Kind.spendings => const EmptyState(
+                    icon: Icons.shopping_bag_outlined,
+                    title: 'ยังไม่มียอดใช้จ่าย',
+                    message: 'กด "เพิ่มยอดใช้จ่าย" ในหน้าบัตรเมื่อรูดซื้อของ',
+                  ),
+              },
             ));
           }
 
           DateTime? month;
-          for (final (p, a) in entries) {
-            if (month == null || !isSameMonth(month, p.date)) {
-              month = startOfMonth(p.date);
-              final m = month;
-              final inMonth = entries.where((e) => isSameMonth(e.$1.date, m));
-              final total = inMonth.fold(0.0, (t, e) => t + e.$1.amount);
-              final extra = inMonth
-                  .where((e) => e.$1.type == PaymentType.extra)
-                  .fold(0.0, (t, e) => t + e.$1.amount);
+          for (final e in entries) {
+            if (month == null || !isSameMonth(month, e.date)) {
+              month = startOfMonth(e.date);
               children.add(SectionHeader(
-                fmtMonthYear(m),
+                fmtMonthYear(month),
                 trailing: Text(
-                  '${fmtMoney(total)}${extra > 0 ? ' (โปะ ${fmtMoney(extra)})' : ''}',
+                  _monthTotals(entries.where((x) => isSameMonth(x.date, month!))),
+                  textAlign: TextAlign.end,
                   style: Theme.of(context).textTheme.labelLarge,
                 ),
               ));
             }
-            children.add(InkWell(
-              onTap: () => openAccount(context, a.account.id),
-              child: PaymentTile(payment: p, summary: a, showAccount: true),
-            ));
+            void open() => openAccount(context, e.a.account.id);
+            children.add(e.payment != null
+                ? PaymentTile(payment: e.payment!, summary: e.a, showAccount: true, onTap: open)
+                : SpendingTile(spending: e.spending!, summary: e.a, showAccount: true, onTap: open));
           }
 
           return RefreshIndicator(
@@ -109,5 +145,23 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
         },
       ),
     );
+  }
+
+  /// "จ่าย ฿X (โปะ ฿Y) · ใช้ ฿Z" for the parts the current filter shows.
+  String _monthTotals(Iterable<_Entry> inMonth) {
+    var paid = 0.0, extra = 0.0, spent = 0.0;
+    for (final e in inMonth) {
+      final p = e.payment;
+      if (p != null) {
+        paid += p.amount;
+        if (p.type == PaymentType.extra) extra += p.amount;
+      } else {
+        spent += e.spending!.amount;
+      }
+    }
+    return [
+      if (paid > 0) 'จ่าย ${fmtMoney(paid)}${extra > 0 && _kind == _Kind.payments ? ' (โปะ ${fmtMoney(extra)})' : ''}',
+      if (spent > 0) 'ใช้ ${fmtMoney(spent)}',
+    ].join(' · ');
   }
 }

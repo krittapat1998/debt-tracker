@@ -4,6 +4,7 @@ import '../../domain/models/account.dart';
 import '../../domain/models/credit_line.dart';
 import '../../domain/models/installment_plan.dart';
 import '../../domain/models/payment.dart';
+import '../../domain/models/spending.dart';
 import '../db/app_database.dart';
 import 'repositories.dart';
 
@@ -132,6 +133,31 @@ class SqlitePaymentRepository implements PaymentRepository {
   @override
   Future<void> delete(String id) =>
       _db.db.delete('payments', where: 'id = ?', whereArgs: [id]);
+}
+
+class SqliteSpendingRepository implements SpendingRepository {
+  SqliteSpendingRepository(this._db);
+  final AppDatabase _db;
+
+  @override
+  Future<List<Spending>> getAll() async {
+    final rows = await _db.db.query('spendings', orderBy: 'date DESC, created_at DESC');
+    return rows.map(Spending.fromMap).toList();
+  }
+
+  @override
+  Future<Spending?> getById(String id) async {
+    final rows = await _db.db.query('spendings', where: 'id = ?', whereArgs: [id]);
+    return rows.isEmpty ? null : Spending.fromMap(rows.first);
+  }
+
+  @override
+  Future<void> insert(Spending spending) => _db.db.insert('spendings', spending.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace);
+
+  @override
+  Future<void> delete(String id) =>
+      _db.db.delete('spendings', where: 'id = ?', whereArgs: [id]);
 }
 
 class SqliteSettingsRepository implements SettingsRepository {

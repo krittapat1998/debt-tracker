@@ -1,12 +1,17 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/date_utils.dart';
 import '../../core/formatters.dart';
+import '../../data/services/ledger_service.dart';
 import '../../domain/finance/installment_engine.dart';
 import '../../domain/finance/portfolio.dart';
 import '../../domain/models/credit_line.dart';
 import '../../domain/models/enums.dart';
 import '../../domain/models/payment.dart';
+import '../../domain/models/spending.dart';
 import '../providers.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -59,27 +64,19 @@ class AccountDetailScreen extends ConsumerWidget {
             ),
         ],
       ),
-      floatingActionButton: a == null
-          ? null
-          : FloatingActionButton.extended(
-              icon: const Icon(Icons.payments_outlined),
-              label: const Text('บันทึกการจ่าย'),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => PaymentFormScreen(accountId: a.account.id)),
-              ),
-            ),
       body: AsyncBody(
         value: portfolio,
         builder: (_) {
           if (a == null) return const EmptyState(icon: Icons.search_off, title: 'ไม่พบข้อมูล');
           return ListView(
-            padding: const EdgeInsets.only(bottom: 96),
+            padding: const EdgeInsets.only(bottom: 32),
             children: [
+              _DueCard(a: a),
+              _QuickActions(a: a),
               _OverviewCard(a: a),
-              _StatementCard(a: a),
-              SectionHeader('วงเงินย่อย (${a.lines.length})'),
+              SectionHeader(a.lines.length > 1 ? 'วงเงินย่อย (${a.lines.length})' : 'วงเงิน'),
               for (final l in a.lines) _LineTile(a: a, line: l),
+              if (a.spendings.isNotEmpty) _SpendingSection(a: a),
               SectionHeader(
                 'รายการผ่อน',
                 trailing: TextButton.icon(
@@ -112,6 +109,168 @@ class AccountDetailScreen extends ConsumerWidget {
   }
 }
 
+/// What to pay next and by when: the open statement and separately billed
+/// installments, with the statement details kept small underneath.
+class _DueCard extends StatelessWidget {
+  const _DueCard({required this.a});
+  final AccountSummary a;
+
+  @override
+  Widget build(BuildContext context) {
+    final acc = a.account;
+    final cs = Theme.of(context).colorScheme;
+    final t = Theme.of(context).textTheme;
+    final stmtDue = a.statementDueDate;
+    final hasStatement = acc.statementDate != null;
+    final stmtOpen = hasStatement && !a.isStatementPaid;
+    final planDues = [
+      for (final p in a.activePlans)
+        if (!p.plan.includedInStatement && p.nextRow?.dueDate != null)
+          (name: p.plan.name, date: p.nextRow!.dueDate!, amount: p.nextRow!.payment),
+    ];
+    final dates = [if (stmtOpen && stmtDue != null) stmtDue, for (final d in planDues) d.date]..sort();
+    final first = dates.isEmpty ? null : dates.first;
+    final days = first == null ? null : daysBetween(a.today, first);
+    final overdue = days != null && days < 0;
+    final fg = overdue ? cs.onErrorContainer : cs.onPrimaryContainer;
+    final accent = overdue ? cs.error : (days != null && days <= 3 ? cs.warning : fg);
+    // Dates other than the headline one are shown next to their amount.
+    String on(DateTime? d) => d == null || d == first ? '' : ' (${fmtDateShort(d)})';
+    final headline = t.titleMedium?.copyWith(color: fg, fontWeight: FontWeight.w600);
+    final small = t.bodySmall?.copyWith(color: fg);
+    final cycle = [
+      if (acc.billingDay != null) 'ตัดรอบทุกวันที่ ${acc.billingDay}',
+      if (acc.dueDay != null) 'ครบกำหนดทุกวันที่ ${acc.dueDay}',
+    ].join(' · ');
+
+    return Card(
+      color: overdue ? cs.errorContainer : cs.primaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (first != null)
+              Row(
+                children: [
+                  Icon(overdue ? Icons.warning_amber : Icons.event, color: accent),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text('${overdue ? 'เลยกำหนดจ่าย' : 'ต้องจ่ายภายใน'} ${fmtDate(first)}', style: headline)),
+                  Pill(fmtRelativeDays(days!), color: accent),
+                ],
+              )
+            else
+              Row(
+                children: [
+                  Icon(
+                    !hasStatement && acc.type == AccountType.creditCard ? Icons.info_outline : Icons.check_circle,
+                    color: !hasStatement && acc.type == AccountType.creditCard ? fg : cs.positive,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      hasStatement
+                          ? (a.statementOutstanding > 0.005 ? 'จ่ายขั้นต่ำงวดนี้ครบแล้ว' : 'จ่ายบิลงวดนี้ครบแล้ว')
+                          : acc.type == AccountType.creditCard
+                              ? 'ยังไม่ได้บันทึกยอดบิล'
+                              : 'ไม่มียอดต้องจ่ายตอนนี้',
+                      style: headline,
+                    ),
+                  ),
+                ],
+              ),
+            if (stmtOpen) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(child: StatTile(label: 'ขั้นต่ำ${on(stmtDue)}', value: fmtMoney(a.minimumOutstanding), color: fg)),
+                  Expanded(child: StatTile(label: 'หรือจ่ายเต็มยอด', value: fmtMoney(a.statementOutstanding), color: fg)),
+                ],
+              ),
+              if (a.paidTowardStatement > 0.005)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text('จ่ายแล้ว ${fmtMoney(a.paidTowardStatement)} ตั้งแต่ออกใบแจ้งยอด',
+                      style: t.bodySmall?.copyWith(color: cs.positive)),
+                ),
+            ],
+            if (planDues.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              for (final d in planDues) InfoRow('ค่าผ่อน ${d.name}${on(d.date)}', fmtMoney(d.amount), valueColor: fg, bold: true),
+            ],
+            if (hasStatement && !stmtOpen && first != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text('บิลบัตร: จ่ายขั้นต่ำครบแล้ว', style: t.bodySmall?.copyWith(color: cs.positive)),
+              ),
+            if (hasStatement && !stmtOpen && a.statementOutstanding > 0.005)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text('ยังเหลือเต็มยอด ${fmtMoney(a.statementOutstanding)}', style: t.bodyMedium?.copyWith(color: fg)),
+              ),
+            if (!hasStatement && first == null && acc.type == AccountType.creditCard)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text('กด "อัปเดตยอดบิล" เมื่อได้ใบแจ้งยอดหรือ SMS จากธนาคาร', style: small),
+              ),
+            if (hasStatement || cycle.isNotEmpty) ...[
+              Divider(height: 24, color: fg.withValues(alpha: 0.2)),
+              if (hasStatement)
+                Text('ใบแจ้งยอด ${fmtDate(acc.statementDate!)} · ยอดบิล ${fmtMoney(acc.statementBalance)}', style: small),
+              if (cycle.isNotEmpty) Text(cycle, style: small),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The things done most often on a card, in one place.
+class _QuickActions extends ConsumerWidget {
+  const _QuickActions({required this.a});
+  final AccountSummary a;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final style = FilledButton.styleFrom(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+    );
+    Widget action(IconData icon, String label, VoidCallback? onPressed, {bool primary = false}) {
+      final child = Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [Icon(icon), const SizedBox(height: 4), Text(label, textAlign: TextAlign.center)],
+      );
+      return Expanded(
+        child: primary
+            ? FilledButton(style: style, onPressed: onPressed, child: child)
+            : FilledButton.tonal(style: style, onPressed: onPressed, child: child),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: Row(
+        spacing: 8,
+        children: [
+          action(
+            Icons.payments_outlined,
+            'บันทึกการจ่าย',
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => PaymentFormScreen(accountId: a.account.id)),
+            ),
+            primary: true,
+          ),
+          action(Icons.add_shopping_cart, 'เพิ่มยอดใช้จ่าย', a.lines.isEmpty ? null : () => _addSpending(context, ref, a)),
+          action(Icons.edit_note, 'อัปเดตยอดบิล', () => showStatementSheet(context, a)),
+        ],
+      ),
+    );
+  }
+}
+
 class _OverviewCard extends StatelessWidget {
   const _OverviewCard({required this.a});
   final AccountSummary a;
@@ -119,8 +278,8 @@ class _OverviewCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final interest = a.estimatedMonthlyInterest;
     return Card(
-      color: cs.primaryContainer,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -131,7 +290,7 @@ class _OverviewCard extends StatelessWidget {
                 Expanded(
                   child: StatTile(label: 'ยอดคงค้างทั้งหมด', value: fmtMoney(a.totalDebt)),
                 ),
-                RateBadge(rate: a.topRate),
+                AccountRateBadge(a: a),
               ],
             ),
             const SizedBox(height: 12),
@@ -139,9 +298,13 @@ class _OverviewCard extends StatelessWidget {
               spacing: 24,
               runSpacing: 10,
               children: [
-                StatTile(label: 'หมุนเวียน', value: fmtMoney(a.revolvingBalance)),
-                StatTile(label: 'ผ่อนชำระ', value: fmtMoney(a.installmentBalance)),
-                StatTile(label: 'ดอกราว/เดือน', value: fmtMoney(a.estimatedMonthlyInterest), color: cs.error),
+                StatTile(label: a.account.type.revolvingLabel, value: fmtMoney(a.revolvingBalance)),
+                if (a.plans.isNotEmpty) StatTile(label: 'ยอดผ่อน', value: fmtMoney(a.installmentBalance)),
+                StatTile(
+                  label: 'ดอกราว/เดือน',
+                  value: fmtMoney(interest),
+                  color: interest > 0.005 ? cs.error : null,
+                ),
               ],
             ),
             if (a.creditLimit > 0) ...[
@@ -149,8 +312,8 @@ class _OverviewCard extends StatelessWidget {
               UsageBar(used: a.usedLimit, limit: a.creditLimit),
               const SizedBox(height: 4),
               Text(
-                'ใช้ไป ${fmtMoney(a.usedLimit)} · คงเหลือ ${fmtMoney(a.availableLimit)} · วงเงิน ${fmtMoney(a.creditLimit)}'
-                '${a.account.sharedLimit != null ? ' (ใช้ร่วมกัน)' : ''}',
+                'ใช้วงเงินไป ${fmtMoney(a.usedLimit)} จาก ${fmtMoney(a.creditLimit)}'
+                '${a.account.sharedLimit != null ? ' (ใช้ร่วมกัน)' : ''} · เหลือใช้ได้ ${fmtMoney(a.availableLimit)}',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
@@ -158,61 +321,6 @@ class _OverviewCard extends StatelessWidget {
               const SizedBox(height: 10),
               Text(a.account.note!, style: Theme.of(context).textTheme.bodySmall),
             ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _StatementCard extends StatelessWidget {
-  const _StatementCard({required this.a});
-  final AccountSummary a;
-
-  @override
-  Widget build(BuildContext context) {
-    final acc = a.account;
-    final cs = Theme.of(context).colorScheme;
-    final stmtDue = a.statementDueDate;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('ยอดเรียกเก็บงวดล่าสุด', style: Theme.of(context).textTheme.titleSmall),
-            const SizedBox(height: 6),
-            if (acc.statementDate == null)
-              const Text('ยังไม่ได้บันทึกยอดเรียกเก็บ')
-            else ...[
-              InfoRow('วันที่ออกใบแจ้งยอด', fmtDate(acc.statementDate!)),
-              InfoRow('ยอดเรียกเก็บ', fmtMoney(acc.statementBalance), bold: true),
-              InfoRow('ยอดขั้นต่ำ', fmtMoney(acc.minimumPayment)),
-              if (stmtDue != null) InfoRow('ครบกำหนดชำระ', fmtDate(stmtDue)),
-              InfoRow('จ่ายแล้วตั้งแต่ออกใบแจ้งยอด', fmtMoney(a.paidTowardStatement), valueColor: cs.positive),
-              InfoRow(
-                'ขั้นต่ำคงเหลือ',
-                a.isStatementPaid ? 'จ่ายครบแล้ว' : fmtMoney(a.minimumOutstanding),
-                valueColor: a.isStatementPaid ? cs.positive : cs.error,
-                bold: true,
-              ),
-              InfoRow('เต็มยอดคงเหลือ', fmtMoney(a.statementOutstanding)),
-            ],
-            InfoRow(
-              'รอบบิล',
-              [
-                acc.billingDay == null ? 'ตัดรอบ: ไม่ระบุ' : 'ตัดรอบทุกวันที่ ${acc.billingDay}',
-                acc.dueDay == null ? 'ครบกำหนด: ไม่ระบุ' : 'ครบกำหนดทุกวันที่ ${acc.dueDay}',
-              ].join(' · '),
-            ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                icon: const Icon(Icons.edit_note),
-                label: const Text('อัปเดตยอดเรียกเก็บ'),
-                onPressed: () => showStatementSheet(context, a),
-              ),
-            ),
           ],
         ),
       ),
@@ -228,7 +336,10 @@ class _LineTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final used = a.usedOnLine(line);
+    final onPlans = used - math.max(0, line.balance);
+    final label = a.account.type.revolvingLabel;
     final t = Theme.of(context).textTheme;
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
     return Card(
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -245,21 +356,24 @@ class _LineTile extends ConsumerWidget {
                 ],
               ),
               const SizedBox(height: 8),
-              InfoRow('ยอดคงค้าง (ไม่รวมรายการผ่อน)', fmtMoney(line.balance), bold: true),
-              if (used > line.balance + 0.005) InfoRow('ใช้วงเงินรวมรายการผ่อน', fmtMoney(used)),
+              InfoRow(label, fmtMoney(line.balance), bold: true),
               if (line.creditLimit > 0) ...[
-                InfoRow('วงเงิน', fmtMoney(line.creditLimit)),
-                const SizedBox(height: 4),
+                const SizedBox(height: 6),
                 UsageBar(used: used, limit: line.creditLimit),
-              ],
+                const SizedBox(height: 4),
+                Text(
+                  'ใช้วงเงินไป ${fmtMoney(used)} จาก ${fmtMoney(line.creditLimit)}'
+                  '${onPlans > 0.005 ? ' · รวมยอดผ่อน ${fmtMoney(onPlans)}' : ''}',
+                  style: t.bodySmall,
+                ),
+              ] else if (onPlans > 0.005)
+                InfoRow('ยอดผ่อนบนวงเงินนี้', fmtMoney(onPlans)),
+              const SizedBox(height: 6),
               Row(
                 children: [
-                  Expanded(child: Text('แตะเพื่อแก้ยอดคงค้าง', style: t.bodySmall)),
-                  TextButton.icon(
-                    icon: const Icon(Icons.add_shopping_cart, size: 18),
-                    label: const Text('เพิ่มยอดใช้จ่าย'),
-                    onPressed: () => _addSpending(context, ref),
-                  ),
+                  Icon(Icons.edit_outlined, size: 14, color: muted),
+                  const SizedBox(width: 4),
+                  Expanded(child: Text('แตะเพื่อแก้$labelให้ตรงกับแอพธนาคาร', style: t.bodySmall?.copyWith(color: muted))),
                 ],
               ),
             ],
@@ -274,14 +388,14 @@ class _LineTile extends ConsumerWidget {
     final value = await showDialog<double>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('ยอดคงค้าง: ${line.name}'),
+        title: Text('${a.account.type.revolvingLabel}: ${line.name}'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            AmountField(controller: controller, label: 'ยอดคงค้างล่าสุด', autofocus: true),
+            AmountField(controller: controller, label: 'ยอดล่าสุด', autofocus: true),
             const SizedBox(height: 8),
             const Text(
-              'ใช้ตัวเลขจากแอพธนาคาร/ใบแจ้งยอด (ไม่รวมยอดผ่อนที่บันทึกเป็นรายการผ่อนไว้แล้ว)',
+              'ดูจากแอพธนาคารหรือใบแจ้งยอด ไม่ต้องรวมยอดผ่อนที่บันทึกเป็นรายการผ่อนไว้แล้ว',
               style: TextStyle(fontSize: 12),
             ),
           ],
@@ -299,66 +413,201 @@ class _LineTile extends ConsumerWidget {
     await ref.read(ledgerProvider).setLineBalance(line.id, value);
     ref.refreshData();
   }
+}
 
-  /// Adds one purchase on top of the balance, so the user doesn't have to
-  /// work out the new total like [_editBalance] needs.
-  Future<void> _addSpending(BuildContext context, WidgetRef ref) async {
-    final controller = TextEditingController();
-    final formKey = GlobalKey<FormState>();
-    final amount = await showDialog<double>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('เพิ่มยอดใช้จ่าย: ${line.name}'),
-        content: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AmountField(controller: controller, label: 'ยอดที่ใช้', required: true, allowZero: false, autofocus: true),
-              const SizedBox(height: 8),
-              Text(
-                'บวกเพิ่มจากยอดคงค้างตอนนี้ ${fmtMoney(line.balance)} '
-                '— ถ้าแบ่งจ่ายเป็นงวด ให้ใช้ "เพิ่มรายการผ่อน" แทน',
-                style: const TextStyle(fontSize: 12),
-              ),
-            ],
+/// Adds one purchase on top of a sub-limit's balance, so the user doesn't
+/// have to work out the new total like editing the balance needs.
+Future<void> _addSpending(BuildContext context, WidgetRef ref, AccountSummary a) async {
+  final label = a.account.type.revolvingLabel;
+  final amountCtl = TextEditingController();
+  final noteCtl = TextEditingController();
+  final formKey = GlobalKey<FormState>();
+  var line = a.lines.first;
+  var date = DateTime.now();
+  final saved = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setState) => AlertDialog(
+        title: const Text('เพิ่มยอดใช้จ่าย'),
+        content: SingleChildScrollView(
+          child: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (a.lines.length > 1) ...[
+                  DropdownButtonFormField<CreditLine>(
+                    initialValue: line,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'ใช้จากวงเงิน'),
+                    items: [for (final l in a.lines) DropdownMenuItem(value: l, child: Text(l.name))],
+                    onChanged: (l) => setState(() => line = l ?? line),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                AmountField(controller: amountCtl, label: 'ยอดที่ใช้', required: true, allowZero: false, autofocus: true),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: noteCtl,
+                  decoration: const InputDecoration(labelText: 'รายละเอียด', hintText: 'จ่ายค่าอะไร เช่น ค่าอาหาร'),
+                ),
+                const SizedBox(height: 12),
+                DateField(value: date, label: 'วันที่ใช้จ่าย', onChanged: (d) => setState(() => date = d ?? date)),
+                const SizedBox(height: 8),
+                Text(
+                  'บวกเพิ่มจาก$labelตอนนี้ ${fmtMoney(line.balance)} '
+                  '— ถ้าแบ่งจ่ายเป็นงวด ให้ใช้ "เพิ่มรายการผ่อน" แทน',
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ],
+            ),
           ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('ยกเลิก')),
           FilledButton(
             onPressed: () {
-              if (formKey.currentState!.validate()) Navigator.pop(ctx, parseAmount(controller.text));
+              if (formKey.currentState!.validate()) Navigator.pop(ctx, true);
             },
             child: const Text('บันทึก'),
           ),
         ],
       ),
-    );
-    if (amount == null) return;
-    await ref.read(ledgerProvider).addSpending(line.id, amount);
-    ref.refreshData();
-    if (context.mounted) {
-      showSnack(context, 'เพิ่มยอดใช้จ่าย ${fmtMoney(amount)} แล้ว · ยอดคงค้าง ${fmtMoney(line.balance + amount)}');
-    }
+    ),
+  );
+  if (saved != true) return;
+  final amount = parseAmount(amountCtl.text)!;
+  final note = noteCtl.text.trim();
+  await ref.read(ledgerProvider).recordSpending(Spending(
+        id: newId(),
+        accountId: line.accountId,
+        creditLineId: line.id,
+        date: date,
+        amount: amount,
+        note: note.isEmpty ? null : note,
+        createdAt: DateTime.now(),
+      ));
+  ref.refreshData();
+  if (context.mounted) {
+    showSnack(context, 'เพิ่มยอดใช้จ่าย ${fmtMoney(amount)} แล้ว · $label ${fmtMoney(line.balance + amount)}');
   }
 }
 
-class _PlanCard extends ConsumerWidget {
+/// Spending history of one account; long lists start collapsed.
+class _SpendingSection extends StatefulWidget {
+  const _SpendingSection({required this.a});
+  final AccountSummary a;
+
+  @override
+  State<_SpendingSection> createState() => _SpendingSectionState();
+}
+
+class _SpendingSectionState extends State<_SpendingSection> {
+  static const _collapsedCount = 3;
+  var _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final all = widget.a.spendings;
+    final shown = _expanded ? all : all.take(_collapsedCount);
+    return Column(
+      children: [
+        SectionHeader(
+          'ประวัติการใช้จ่าย (${all.length})',
+          trailing: all.length <= _collapsedCount
+              ? null
+              : TextButton(
+                  onPressed: () => setState(() => _expanded = !_expanded),
+                  child: Text(_expanded ? 'ย่อ' : 'ดูทั้งหมด'),
+                ),
+        ),
+        for (final s in shown) SpendingTile(spending: s, summary: widget.a),
+      ],
+    );
+  }
+}
+
+class SpendingTile extends ConsumerWidget {
+  const SpendingTile({super.key, required this.spending, required this.summary, this.showAccount = false, this.onTap});
+  final Spending spending;
+  final AccountSummary summary;
+  final bool showAccount;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = spending;
+    String? lineName;
+    if (summary.lines.length > 1) {
+      for (final l in summary.lines) {
+        if (l.id == s.creditLineId) lineName = l.name;
+      }
+    }
+    final details = [
+      if (showAccount) summary.account.name,
+      ?lineName,
+      if (s.source != PaymentSource.manual) 'จาก ${s.source.label}',
+    ];
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+        child: const Icon(Icons.shopping_bag_outlined, size: 20),
+      ),
+      title: Text('${fmtMoney(s.amount)} · ${s.note ?? 'ใช้จ่าย'}'),
+      subtitle: Text([fmtDate(s.date), if (details.isNotEmpty) details.join(' · ')].join('\n')),
+      isThreeLine: details.isNotEmpty,
+      trailing: IconButton(
+        icon: const Icon(Icons.delete_outline),
+        tooltip: 'ลบ',
+        onPressed: () => _delete(context, ref),
+      ),
+      onTap: onTap,
+      onLongPress: () => _delete(context, ref),
+    );
+  }
+
+  Future<void> _delete(BuildContext context, WidgetRef ref) async {
+    final ok = await confirmDialog(
+      context,
+      title: 'ลบรายการใช้จ่ายนี้?',
+      message: '${fmtMoney(spending.amount)} เมื่อ ${fmtDate(spending.date)} — ยอดนี้จะถูกหักออกจากยอดคงค้าง',
+      confirmLabel: 'ลบ',
+      destructive: true,
+    );
+    if (!ok) return;
+    await ref.read(ledgerProvider).deleteSpending(spending.id);
+    ref.refreshData();
+  }
+}
+
+/// Key facts of a plan up front; the rest behind "รายละเอียด".
+class _PlanCard extends ConsumerStatefulWidget {
   const _PlanCard({required this.a, required this.p});
   final AccountSummary a;
   final InstallmentState p;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_PlanCard> createState() => _PlanCardState();
+}
+
+class _PlanCardState extends ConsumerState<_PlanCard> {
+  var _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final a = widget.a;
+    final p = widget.p;
     final cs = Theme.of(context).colorScheme;
     final t = Theme.of(context).textTheme;
     final plan = p.plan;
     final locked = p.isLockedOn(DateTime.now());
     final next = p.nextRow;
+    final hasPenalty = plan.penaltyPercent > 0 || plan.penaltyFixed > 0;
+    // Tight enough that all three buttons share one row on a 390pt screen.
+    final compact = TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8));
     return Card(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+        padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -390,14 +639,17 @@ class _PlanCard extends ConsumerWidget {
               ],
             ),
             if (plan.interestMethod == InterestMethod.flat)
-              Text('อัตราที่แท้จริง (ลดต้นลดดอก) ≈ ${fmtPercent(p.effectiveAnnualRate)}/ปี',
+              Text('flat ${fmtRate(plan.annualRate)} เท่ากับดอกจริงราว ${fmtRate(p.effectiveAnnualRate)}/ปี',
                   style: t.bodySmall?.copyWith(color: cs.error)),
             const SizedBox(height: 10),
             if (p.isClosed)
               Pill('ปิดยอดแล้ว', color: cs.positive, icon: Icons.check_circle)
             else ...[
-              Text('งวดที่จ่ายแล้ว ${p.paidInstallments}/${p.paidInstallments + p.remainingInstallments}',
-                  style: t.bodySmall),
+              Text(
+                'จ่ายแล้ว ${p.paidInstallments}/${p.paidInstallments + p.remainingInstallments} งวด · '
+                'เหลืออีก ${fmtMonths(p.remainingInstallments)}',
+                style: t.bodySmall,
+              ),
               const SizedBox(height: 4),
               Padding(
                 padding: const EdgeInsets.only(right: 8),
@@ -410,41 +662,68 @@ class _PlanCard extends ConsumerWidget {
               child: Column(
                 children: [
                   InfoRow('เงินต้นคงเหลือ', fmtMoney(p.remainingPrincipal), bold: true),
-                  if (!p.isClosed) ...[
-                    InfoRow('ค่าผ่อน/เดือน', fmtMoney(p.currentPayment)),
-                    InfoRow('เหลืออีก', fmtMonths(p.remainingInstallments)),
-                    if (next?.dueDate != null) InfoRow('งวดถัดไป', '${fmtDate(next!.dueDate!)} · ${fmtMoney(next.payment)}'),
-                    if (p.projectedPayoffDate != null) InfoRow('ปิดยอดตามแผน', fmtDate(p.projectedPayoffDate!)),
-                  ],
-                  InfoRow('ดอกที่จ่ายไปแล้ว', fmtMoney(p.interestPaid)),
-                  if (!p.isClosed) InfoRow('ดอกที่ต้องจ่ายอีก', fmtMoney(p.projectedRemainingInterest), valueColor: cs.error),
-                  if (p.extraPaid > 0) InfoRow('โปะเพิ่มไปแล้ว', fmtMoney(p.extraPaid), valueColor: cs.positive),
-                  if (p.interestSavedSoFar > 0.5)
-                    InfoRow('ประหยัดดอกจากการโปะ', fmtMoney(p.interestSavedSoFar), valueColor: cs.positive),
-                  if (p.earliestClosureDate != null)
-                    InfoRow(
-                      'ปิดก่อนกำหนดได้เร็วสุด',
-                      locked ? '${fmtDate(p.earliestClosureDate!)} (ติด lock-in)' : '${fmtDate(p.earliestClosureDate!)} (พ้นแล้ว)',
-                      valueColor: locked ? cs.warning : cs.positive,
+                  if (!p.isClosed && next?.dueDate != null)
+                    InfoRow('งวดถัดไป ${fmtDate(next!.dueDate!)}', fmtMoney(next.payment)),
+                  if (!p.isClosed && locked && p.earliestClosureDate != null)
+                    InfoRow('ปิดก่อนกำหนดได้ตั้งแต่', fmtDate(p.earliestClosureDate!), valueColor: cs.warning),
+                  if (!p.isClosed && plan.includedInStatement)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline, size: 14, color: cs.onSurfaceVariant),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text('ค่างวดรวมอยู่ในบิลบัตรแล้ว ไม่ต้องจ่ายแยก',
+                                style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                          ),
+                        ],
+                      ),
                     ),
-                  if (!p.isClosed && (plan.penaltyPercent > 0 || plan.penaltyFixed > 0))
-                    InfoRow('ยอดปิดวันนี้ (รวมค่าปรับ ${fmtMoney(p.earlyClosurePenalty)})', fmtMoney(p.payoffAmount)),
-                  if (plan.includedInStatement)
-                    const InfoRow('การชำระ', 'รวมในยอดเรียกเก็บบัตร (เดินงวดอัตโนมัติ)'),
+                  if (_expanded) ...[
+                    if (!p.isClosed) ...[
+                      InfoRow('ค่าผ่อน/เดือน', fmtMoney(p.currentPayment)),
+                      if (p.projectedPayoffDate != null) InfoRow('ปิดยอดตามแผน', fmtDate(p.projectedPayoffDate!)),
+                    ],
+                    InfoRow('ดอกที่จ่ายไปแล้ว', fmtMoney(p.interestPaid)),
+                    if (!p.isClosed)
+                      InfoRow(
+                        'ดอกที่ต้องจ่ายอีก',
+                        fmtMoney(p.projectedRemainingInterest),
+                        valueColor: p.projectedRemainingInterest > 0.005 ? cs.error : null,
+                      ),
+                    if (p.extraPaid > 0) InfoRow('โปะเพิ่มไปแล้ว', fmtMoney(p.extraPaid), valueColor: cs.positive),
+                    if (p.interestSavedSoFar > 0.5)
+                      InfoRow('ประหยัดดอกจากการโปะ', fmtMoney(p.interestSavedSoFar), valueColor: cs.positive),
+                    if (!p.isClosed && !locked && p.earliestClosureDate != null)
+                      InfoRow('ปิดก่อนกำหนด', 'ทำได้แล้ว (พ้น lock-in ${fmtDate(p.earliestClosureDate!)})',
+                          valueColor: cs.positive),
+                    if (!p.isClosed && hasPenalty)
+                      InfoRow('ยอดปิดวันนี้ (รวมค่าปรับ ${fmtMoney(p.earlyClosurePenalty)})', fmtMoney(p.payoffAmount)),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        icon: const Icon(Icons.table_rows_outlined),
+                        label: const Text('ดูตารางผ่อนทุกงวด'),
+                        onPressed: () => Navigator.push(context,
+                            MaterialPageRoute(builder: (_) => ScheduleScreen(accountId: a.account.id, planId: plan.id))),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
             Wrap(
-              spacing: 4,
               children: [
                 TextButton.icon(
-                  icon: const Icon(Icons.table_rows_outlined),
-                  label: const Text('ตารางผ่อน'),
-                  onPressed: () => Navigator.push(
-                      context, MaterialPageRoute(builder: (_) => ScheduleScreen(accountId: a.account.id, planId: plan.id))),
+                  style: compact,
+                  icon: Icon(_expanded ? Icons.expand_less : Icons.expand_more),
+                  label: Text(_expanded ? 'ซ่อน' : 'รายละเอียด'),
+                  onPressed: () => setState(() => _expanded = !_expanded),
                 ),
                 if (!p.isClosed)
                   TextButton.icon(
+                    style: compact,
                     icon: const Icon(Icons.calculate_outlined),
                     label: const Text('คำนวณโปะ'),
                     onPressed: () => Navigator.push(
@@ -452,6 +731,7 @@ class _PlanCard extends ConsumerWidget {
                   ),
                 if (!p.isClosed && !plan.includedInStatement)
                   TextButton.icon(
+                    style: compact,
                     icon: const Icon(Icons.check),
                     label: const Text('จ่ายงวดนี้'),
                     onPressed: () => Navigator.push(
@@ -476,10 +756,11 @@ class _PlanCard extends ConsumerWidget {
 
 /// One row of payment history; long-press or the menu deletes it.
 class PaymentTile extends ConsumerWidget {
-  const PaymentTile({super.key, required this.payment, required this.summary, this.showAccount = false});
+  const PaymentTile({super.key, required this.payment, required this.summary, this.showAccount = false, this.onTap});
   final Payment payment;
   final AccountSummary summary;
   final bool showAccount;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -488,9 +769,18 @@ class PaymentTile extends ConsumerWidget {
     for (final s in summary.plans) {
       if (s.plan.id == p.planId) target = s.plan.name;
     }
-    for (final l in summary.lines) {
-      if (l.id == p.creditLineId && p.planId == null) target = l.name;
+    if (summary.lines.length > 1) {
+      for (final l in summary.lines) {
+        if (l.id == p.creditLineId && p.planId == null) target = l.name;
+      }
     }
+    final details = [
+      if (showAccount) summary.account.name,
+      ?target,
+      if (p.prepaymentMode != null && p.type == PaymentType.extra) p.prepaymentMode!.label,
+      if (p.source != PaymentSource.manual) 'จาก ${p.source.label}',
+      if (p.note != null && p.note!.isNotEmpty) p.note!,
+    ];
     final cs = Theme.of(context).colorScheme;
     return ListTile(
       leading: CircleAvatar(
@@ -507,19 +797,14 @@ class PaymentTile extends ConsumerWidget {
         ),
       ),
       title: Text('${fmtMoney(p.amount)} · ${p.type.label}'),
-      subtitle: Text([
-        fmtDate(p.date),
-        if (showAccount) summary.account.name,
-        ?target,
-        if (p.prepaymentMode != null && p.type == PaymentType.extra) p.prepaymentMode!.label,
-        if (p.source != PaymentSource.manual) 'จาก ${p.source.label}',
-        if (p.note != null && p.note!.isNotEmpty) p.note!,
-      ].join(' · ')),
+      subtitle: Text([fmtDate(p.date), if (details.isNotEmpty) details.join(' · ')].join('\n')),
+      isThreeLine: details.isNotEmpty,
       trailing: IconButton(
         icon: const Icon(Icons.delete_outline),
         tooltip: 'ลบ',
         onPressed: () => _delete(context, ref),
       ),
+      onTap: onTap,
       onLongPress: () => _delete(context, ref),
     );
   }

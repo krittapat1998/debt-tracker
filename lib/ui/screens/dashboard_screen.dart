@@ -24,20 +24,23 @@ class DashboardScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Debt Tracker'),
         actions: [
-          IconButton(
-            tooltip: 'นำเข้ายอดจาก SMS',
+          TextButton.icon(
+            style: _compact,
             icon: Badge(
               isLabelVisible: pending.isNotEmpty,
               label: Text('${pending.length}'),
               child: const Icon(Icons.sms_outlined),
             ),
+            label: const Text('นำเข้า SMS'),
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SmsImportScreen())),
           ),
-          IconButton(
-            tooltip: 'เพิ่มบัตร/สินเชื่อ',
+          TextButton.icon(
+            style: _compact,
             icon: const Icon(Icons.add_card_outlined),
+            label: const Text('เพิ่มบัตร'),
             onPressed: () => openNewAccount(context),
           ),
+          const SizedBox(width: 4),
         ],
       ),
       floatingActionButton: hasAccounts
@@ -74,8 +77,8 @@ class DashboardScreen extends ConsumerWidget {
                 _SummaryCard(s: s),
                 if (s.nextDue != null) _NextDueCard(a: s.nextDue!),
                 if (s.recommendedTarget != null) _AvalancheCard(s: s),
-                const SectionHeader('บัตร/สินเชื่อ · เรียงดอกเบี้ยสูง → ต่ำ'),
-                for (final a in s.accounts)
+                const SectionHeader('บัตร/สินเชื่อ · เรียงตามวันครบกำหนด'),
+                for (final a in s.byDueDate)
                   _AccountCard(a: a, isMostExpensive: identical(a, s.mostExpensive)),
               ],
             ),
@@ -85,6 +88,9 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 }
+
+/// Narrow padding so both labeled buttons fit beside the title on a 390pt screen.
+final _compact = TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8));
 
 Future<void> openNewAccount(BuildContext context) =>
     Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountFormScreen()));
@@ -132,7 +138,7 @@ class _SummaryCard extends StatelessWidget {
             Text(fmtMoney(s.totalDebt),
                 style: t.headlineMedium?.copyWith(color: cs.onPrimaryContainer, fontWeight: FontWeight.bold)),
             Text(
-              'หมุนเวียน ${fmtMoney(s.totalRevolving)} · ผ่อนชำระ ${fmtMoney(s.totalInstallment)}',
+              'ยอดรูดบัตร ${fmtMoney(s.totalRevolving)} · ยอดผ่อน ${fmtMoney(s.totalInstallment)}',
               style: t.bodySmall?.copyWith(color: cs.onPrimaryContainer),
             ),
             const Divider(height: 28),
@@ -141,11 +147,15 @@ class _SummaryCard extends StatelessWidget {
               runSpacing: 14,
               children: [
                 StatTile(
-                  label: 'ต้องจ่ายเดือนนี้ (ขั้นต่ำ+ค่าผ่อน)',
+                  label: 'ต้องจ่ายเดือนนี้',
                   value: fmtMoney(due.gross),
-                  caption: due.remaining > 0.005 ? 'คงเหลือ ${fmtMoney(due.remaining)}' : 'จ่ายครบแล้ว',
+                  caption: due.remaining <= 0.005
+                      ? 'จ่ายครบแล้ว'
+                      : due.paid > 0.005
+                          ? 'ยังเหลือ ${fmtMoney(due.remaining)}'
+                          : 'ขั้นต่ำบัตร + ค่าผ่อน',
                 ),
-                StatTile(label: 'จ่ายจริงเดือนนี้', value: fmtMoney(s.paidThisMonth), color: cs.positive),
+                StatTile(label: 'จ่ายไปแล้วเดือนนี้', value: fmtMoney(s.paidThisMonth), color: cs.positive),
                 StatTile(
                   label: 'ดอกเบี้ยโดยประมาณ/เดือน',
                   value: fmtMoney(s.estimatedMonthlyInterest),
@@ -168,18 +178,26 @@ class _NextDueCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final days = a.daysUntilDue ?? 0;
-    final urgent = days <= 3;
-    final color = days < 0 ? cs.error : (urgent ? cs.warning : cs.primary);
+    final overdue = days < 0;
+    final color = overdue ? cs.error : (days <= 3 ? cs.warning : cs.primary);
+    final textColor = overdue ? cs.onErrorContainer : null;
     return Card(
+      color: overdue ? cs.errorContainer : null,
       child: ListTile(
-        leading: Icon(days < 0 ? Icons.warning_amber : Icons.event_outlined, color: color),
-        title: Text('ใกล้ครบกำหนด: ${a.account.name}'),
-        subtitle: Text([
-          fmtDate(a.nextDueDate!),
-          fmtRelativeDays(days),
-          if (a.nextDueAmount > 0) fmtMoney(a.nextDueAmount),
-        ].join(' · ')),
-        trailing: const Icon(Icons.chevron_right),
+        leading: Icon(overdue ? Icons.warning_amber : Icons.event_outlined, color: color),
+        title: Text(
+          '${overdue ? 'เลยกำหนดจ่ายแล้ว' : days <= 7 ? 'ใกล้ครบกำหนด' : 'ครบกำหนดถัดไป'}: ${a.account.name}',
+          style: TextStyle(color: textColor, fontWeight: overdue ? FontWeight.w600 : null),
+        ),
+        subtitle: Text(
+          [
+            fmtDate(a.nextDueDate!),
+            fmtRelativeDays(days),
+            if (a.nextDueAmount > 0) fmtMoney(a.nextDueAmount),
+          ].join(' · '),
+          style: TextStyle(color: textColor),
+        ),
+        trailing: Icon(Icons.chevron_right, color: textColor),
         onTap: () => openAccount(context, a.account.id),
       ),
     );
@@ -214,14 +232,14 @@ class _AvalancheCardState extends State<_AvalancheCard> {
               children: [
                 Icon(Icons.trending_down, color: cs.error),
                 const SizedBox(width: 8),
-                Expanded(child: Text('มีเงินเหลือ ควรโปะก่อน (Debt avalanche)', style: t.titleSmall)),
+                Expanded(child: Text('มีเงินเหลือ โปะอันนี้ก่อน (ดอกแพงสุด)', style: t.titleSmall)),
               ],
             ),
             const SizedBox(height: 8),
             Text('${target.accountName} · ${target.label}', style: t.titleMedium),
             Text(
-              'ดอก ${fmtPercent(target.effectiveRate)}/ปี · คงค้าง ${fmtMoney(target.balance)} · '
-              'ดอกราว ${fmtMoney(target.monthlyInterest)}/เดือน',
+              'ดอก ${fmtRate(target.effectiveRate)}/ปี · ค้างอยู่ ${fmtMoney(target.balance)}\n'
+              'เสียดอกราว ${fmtMoney(target.monthlyInterest)} ต่อเดือน',
               style: t.bodySmall,
             ),
             // avalanche builds fresh DebtItems on each call: compare by id.
@@ -229,7 +247,7 @@ class _AvalancheCardState extends State<_AvalancheCard> {
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(
-                  '${items.first.accountName} · ${items.first.label} ดอกสูงกว่า แต่ยังติด lock-in ถึง ${fmtDate(items.first.lockedUntil!)}',
+                  '${items.first.accountName} · ${items.first.label} ดอกสูงกว่า แต่ยังปิดก่อนกำหนดไม่ได้จนถึง ${fmtDate(items.first.lockedUntil!)}',
                   style: t.bodySmall?.copyWith(color: cs.warning),
                 ),
               ),
@@ -238,7 +256,7 @@ class _AvalancheCardState extends State<_AvalancheCard> {
                 alignment: Alignment.centerRight,
                 child: TextButton(
                   onPressed: () => setState(() => _expanded = !_expanded),
-                  child: Text(_expanded ? 'ซ่อนลำดับ' : 'ดูลำดับทั้งหมด (${items.length})'),
+                  child: Text(_expanded ? 'ซ่อนลำดับ' : 'ดูลำดับที่ควรโปะ (${items.length})'),
                 ),
               ),
             if (_expanded)
@@ -250,7 +268,7 @@ class _AvalancheCardState extends State<_AvalancheCard> {
                   title: Text('${d.accountName} · ${d.label}'),
                   subtitle: Text([
                     fmtMoney(d.balance),
-                    if (d.lockedOn(s.today)) 'lock-in ถึง ${fmtDate(d.lockedUntil!)}',
+                    if (d.lockedOn(s.today)) 'ปิดก่อนได้ ${fmtDate(d.lockedUntil!)}',
                   ].join(' · ')),
                   trailing: RateBadge(rate: d.effectiveRate, highlight: i == 0),
                   onTap: () => openAccount(context, d.accountId),
@@ -304,7 +322,7 @@ class _AccountCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  RateBadge(rate: a.topRate, highlight: isMostExpensive),
+                  AccountRateBadge(a: a, highlight: isMostExpensive),
                 ],
               ),
               if (isMostExpensive)
@@ -319,8 +337,8 @@ class _AccountCard extends StatelessWidget {
                   Expanded(child: StatTile(label: 'ยอดคงค้าง', value: fmtMoney(a.totalDebt))),
                   if (due.gross > 0)
                     StatTile(
-                      label: 'เดือนนี้',
-                      value: due.remaining > 0.005 ? fmtMoney(due.remaining) : 'จ่ายแล้ว',
+                      label: 'ต้องจ่ายเดือนนี้',
+                      value: due.remaining > 0.005 ? fmtMoney(due.remaining) : 'จ่ายครบแล้ว',
                       color: due.remaining > 0.005 ? null : cs.positive,
                     ),
                 ],
@@ -335,10 +353,20 @@ class _AccountCard extends StatelessWidget {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    Icon(Icons.event, size: 16, color: (days ?? 9) <= 3 ? cs.warning : cs.onSurfaceVariant),
+                    Icon(
+                      days! < 0 ? Icons.warning_amber : Icons.event,
+                      size: 16,
+                      color: days < 0 ? cs.error : (days <= 3 ? cs.warning : cs.onSurfaceVariant),
+                    ),
                     const SizedBox(width: 6),
                     Expanded(
-                      child: Text('ครบกำหนด ${fmtDate(a.nextDueDate!)} (${fmtRelativeDays(days!)})', style: t.bodySmall),
+                      child: Text(
+                        '${days < 0 ? 'เลยกำหนด' : 'ครบกำหนด'} ${fmtDate(a.nextDueDate!)} (${fmtRelativeDays(days)})',
+                        style: t.bodySmall?.copyWith(
+                          color: days < 0 ? cs.error : null,
+                          fontWeight: days < 0 ? FontWeight.w600 : null,
+                        ),
+                      ),
                     ),
                   ],
                 ),
