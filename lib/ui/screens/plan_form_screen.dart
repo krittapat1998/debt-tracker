@@ -232,7 +232,7 @@ class _Preview extends StatelessWidget {
             InfoRow('ค่าผ่อนต่อเดือน', fmtMoney(s.payment), bold: true),
             InfoRow('ดอกเบี้ยรวมทั้งสัญญา', fmtMoney(interest), valueColor: cs.error),
             InfoRow('ยอดชำระรวม', fmtMoney(p.principal + interest)),
-            InfoRow('อัตราดอกเบี้ยที่แท้จริง (effective)', '${fmtPercent(effective)}/ปี', bold: true),
+            InfoRow('ดอกเบี้ยจริงต่อปี (เทียบแบบลดต้นลดดอก)', '${fmtPercent(effective)}/ปี', bold: true),
             if (p.annualRate > 0 && p.monthlyPaymentOverride == null)
               Padding(
                 padding: const EdgeInsets.only(top: 6),

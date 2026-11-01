@@ -22,6 +22,9 @@ String fmtMoneyCompact(double v) => '฿${_moneyNoDecimal.format(v.round())}';
 
 String fmtPercent(double v, {int digits = 2}) => '${v.toStringAsFixed(digits)}%';
 
+/// Interest rate without trailing zeros, e.g. "16%", "25.98%".
+String fmtRate(double v) => '${v.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '')}%';
+
 /// Thai-style date with Buddhist-era year, e.g. "5 พ.ย. 2569".
 String fmtDate(DateTime d) =>
     '${d.day} ${thaiMonthsShort[d.month - 1]} ${d.year + 543}';

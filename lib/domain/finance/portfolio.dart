@@ -342,6 +342,19 @@ class PortfolioSummary {
     return null;
   }
 
+  /// Accounts by their next payment date, overdue first and those with
+  /// nothing due last; ties keep the interest-rate order.
+  List<AccountSummary> get byDueDate {
+    final rank = {for (final (i, a) in accounts.indexed) a: i};
+    return [...accounts]..sort((a, b) {
+        final da = a.nextDueDate, db = b.nextDueDate;
+        final c = da == null || db == null
+            ? (da == null ? 1 : 0) - (db == null ? 1 : 0)
+            : da.compareTo(db);
+        return c != 0 ? c : rank[a]!.compareTo(rank[b]!);
+      });
+  }
+
   AccountSummary? get nextDue {
     AccountSummary? best;
     for (final a in accounts) {

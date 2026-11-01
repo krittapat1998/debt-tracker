@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:debt_tracker/core/date_utils.dart';
+import 'package:debt_tracker/core/formatters.dart';
 import 'package:debt_tracker/data/repositories/repositories.dart';
 import 'package:debt_tracker/data/services/ledger_service.dart';
 import 'package:debt_tracker/data/services/settings_service.dart';
@@ -132,11 +133,21 @@ void main() {
   testWidgets('dashboard with data, avalanche expanded', (tester) async {
     await pump(tester, const DashboardScreen());
     expect(find.text('ยอดหนี้รวมทั้งหมด'), findsOneWidget);
-    expect(find.text('ดอกแพงสุด'), findsOneWidget);
-    await tester.tap(find.textContaining('ดูลำดับทั้งหมด'));
+    // First Choice's loan installment is overdue: the alert says so.
+    expect(find.text('เลยกำหนดจ่ายแล้ว: First Choice'), findsOneWidget);
+    expect(find.text('นำเข้า SMS'), findsOneWidget);
+    expect(find.text('เพิ่มบัตร'), findsOneWidget);
+    await tester.tap(find.textContaining('ดูลำดับที่ควรโปะ'));
     await settle(tester);
+    // Cards follow due dates, starting with the overdue First Choice.
     await tester.drag(find.byType(ListView).first, const Offset(0, -1500));
     await settle(tester);
+    final byName = {for (final a in portfolio.accounts) a.account.name: a};
+    final shown = [for (final e in find.byType(Text).evaluate()) ?byName[(e.widget as Text).data]];
+    expect(shown.first.account.name, 'First Choice');
+    final dues = [for (final a in shown) a.nextDueDate!];
+    expect(dues, [...dues]..sort());
+    expect(find.text('ดอกแพงสุด'), findsOneWidget);
   });
 
   testWidgets('dashboard empty state', (tester) async {
@@ -148,19 +159,50 @@ void main() {
   for (final id in ['a1', 'a2', 'a3']) {
     testWidgets('account detail $id', (tester) async {
       await pump(tester, AccountDetailScreen(accountId: id));
+      // Each sample account has one plan; its details open and close.
+      await tester.scrollUntilVisible(find.text('รายละเอียด'), 300, scrollable: find.byType(Scrollable).first);
+      await settle(tester);
+      await tester.tap(find.text('รายละเอียด'));
+      await settle(tester);
+      expect(find.text('ดอกที่จ่ายไปแล้ว'), findsOneWidget);
+      await tester.ensureVisible(find.text('ซ่อน'));
+      await settle(tester);
+      await tester.tap(find.text('ซ่อน'));
+      await settle(tester);
+      expect(find.text('ดอกที่จ่ายไปแล้ว'), findsNothing);
       await tester.drag(find.byType(ListView).first, const Offset(0, -3000));
       await settle(tester);
     });
   }
 
+  testWidgets('card page leads with what to pay and by when', (tester) async {
+    await pump(tester, const AccountDetailScreen(accountId: 'a1'));
+    final due = portfolio.byId('a1')!.statementDueDate!;
+    expect(find.text('ต้องจ่ายภายใน ${fmtDate(due)}'), findsOneWidget);
+    expect(find.text('฿1,523.05'), findsOneWidget);
+    expect(find.text('฿15,230.50'), findsOneWidget);
+    expect(find.text('ดอกสูงสุด 16%/ปี'), findsOneWidget);
+    expect(find.byType(FloatingActionButton), findsNothing);
+    await tester.scrollUntilVisible(find.text('ไม่มีดอก'), 300, scrollable: find.byType(Scrollable).first);
+    expect(find.text('ค่างวดรวมอยู่ในบิลบัตรแล้ว ไม่ต้องจ่ายแยก'), findsOneWidget);
+
+    // A paid statement and an overdue installment.
+    await pump(tester, const AccountDetailScreen(accountId: 'a2'));
+    expect(find.text('บิลบัตร: จ่ายขั้นต่ำครบแล้ว'), findsOneWidget);
+    await pump(tester, const AccountDetailScreen(accountId: 'a3'));
+    expect(find.textContaining('เลยกำหนดจ่าย'), findsOneWidget);
+    expect(find.text('ค่าผ่อน สินเชื่อก้อน'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('ดอก flat 15%/ปี'), 300, scrollable: find.byType(Scrollable).first);
+  });
+
   testWidgets('add spending adds the amount to that sub-limit', (tester) async {
     final ledger = _RecordingLedger();
     await pump(tester, const AccountDetailScreen(accountId: 'a1'), ledger: ledger);
-    await tester.scrollUntilVisible(find.text('เพิ่มยอดใช้จ่าย'), 300, scrollable: find.byType(Scrollable).first);
-    await settle(tester);
     await tester.tap(find.text('เพิ่มยอดใช้จ่าย'));
     await settle(tester);
-    expect(find.textContaining('ยอดคงค้างตอนนี้ ฿12,000.00'), findsOneWidget);
+    expect(find.textContaining('ยอดรูดบัตรตอนนี้ ฿12,000.00'), findsOneWidget);
+    // One sub-limit: nothing to choose.
+    expect(find.text('ใช้จากวงเงิน'), findsNothing);
 
     // Empty amount is rejected.
     await tester.tap(find.text('บันทึก'));
@@ -175,7 +217,23 @@ void main() {
     final s = ledger.spending.single;
     expect((s.accountId, s.creditLineId, s.amount, s.note), ('a1', 'l1', 1200.0, 'ค่าอาหาร'));
     expect(dateOnly(s.date), dateOnly(DateTime.now()));
-    expect(find.text('เพิ่มยอดใช้จ่าย ฿1,200.00 แล้ว · ยอดคงค้าง ฿13,200.00'), findsOneWidget);
+    expect(find.text('เพิ่มยอดใช้จ่าย ฿1,200.00 แล้ว · ยอดรูดบัตร ฿13,200.00'), findsOneWidget);
+  });
+
+  testWidgets('add spending on a card with two sub-limits asks which one', (tester) async {
+    final ledger = _RecordingLedger();
+    await pump(tester, const AccountDetailScreen(accountId: 'a2'), ledger: ledger);
+    await tester.tap(find.text('เพิ่มยอดใช้จ่าย'));
+    await settle(tester);
+    await tester.tap(find.text('วงเงินบัตรเครดิต').last);
+    await settle(tester);
+    await tester.tap(find.text('วงเงินสินเชื่อ').last);
+    await settle(tester);
+    expect(find.textContaining('ยอดรูดบัตรตอนนี้ ฿0.00'), findsOneWidget);
+    await tester.enterText(find.widgetWithText(TextFormField, 'ยอดที่ใช้'), '500');
+    await tester.tap(find.text('บันทึก'));
+    await settle(tester);
+    expect((ledger.spending.single.creditLineId, ledger.spending.single.amount), ('l3', 500.0));
   });
 
   testWidgets('spending history shows the latest three, with notes, and expands', (tester) async {
@@ -193,11 +251,47 @@ void main() {
     await settle(tester);
     // Newest first; the account has two sub-limits, so each row names its own.
     expect(find.text('฿100.00 · ค่าอาหาร'), findsOneWidget);
-    expect(find.textContaining('· วงเงินบัตรเครดิต'), findsNWidgets(3));
+    expect(find.textContaining('\nวงเงินบัตรเครดิต'), findsNWidgets(3));
     expect(find.text('฿400.00 · ใช้จ่าย'), findsNothing);
     await tester.tap(find.text('ดูทั้งหมด'));
     await settle(tester);
     expect(find.text('฿400.00 · ใช้จ่าย'), findsOneWidget);
+  });
+
+  testWidgets('history mixes payments and spending, and filters by kind', (tester) async {
+    final today = dateOnly(DateTime.now());
+    await pump(
+      tester,
+      const HistoryScreen(),
+      data: samplePortfolio(spendings: [
+        Spending(id: 's1', accountId: 'a1', creditLineId: 'l1', date: today, amount: 350, note: 'ค่าอาหาร', createdAt: today),
+      ]),
+    );
+    expect(find.text('฿350.00 · ค่าอาหาร'), findsOneWidget);
+    expect(find.text('฿840.00 · จ่ายขั้นต่ำ'), findsOneWidget);
+    // Two-line rows: the date, then the account and details.
+    expect(find.textContaining('\nUOB Preferred Platinum · วงเงินบัตรเครดิต'), findsOneWidget);
+
+    await tester.tap(find.text('การจ่าย'));
+    await settle(tester);
+    expect(find.text('฿350.00 · ค่าอาหาร'), findsNothing);
+    expect(find.text('฿840.00 · จ่ายขั้นต่ำ'), findsOneWidget);
+
+    await tester.tap(find.text('ยอดใช้จ่าย'));
+    await settle(tester);
+    expect(find.text('฿350.00 · ค่าอาหาร'), findsOneWidget);
+    expect(find.text('฿840.00 · จ่ายขั้นต่ำ'), findsNothing);
+
+    // Tapping a row opens its card.
+    await tester.tap(find.text('฿350.00 · ค่าอาหาร'));
+    await settle(tester);
+    expect(find.byType(AccountDetailScreen), findsOneWidget);
+    await tester.tap(find.byType(BackButton));
+    await settle(tester);
+
+    await tester.tap(find.text('First Choice'));
+    await settle(tester);
+    expect(find.text('ยังไม่มียอดใช้จ่าย'), findsOneWidget);
   });
 
   testWidgets('account form: new and edit', (tester) async {
