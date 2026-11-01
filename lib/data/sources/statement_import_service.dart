@@ -109,7 +109,8 @@ class StatementImportService {
           createdAt: DateTime.now(),
         ));
       case StatementEventKind.spending:
-        if (d.creditLineId != null) {
+        // A recurring charge (e.g. Netflix) may have recorded it already.
+        if (d.creditLineId != null && !await ledger.coveredByRecurring(d.accountId, d.amount, d.date)) {
           await ledger.recordSpending(Spending(
             id: newId(),
             accountId: d.accountId,

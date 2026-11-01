@@ -116,12 +116,16 @@ class DateField extends StatelessWidget {
     required this.onChanged,
     this.clearable = false,
     this.helper,
+    this.firstDate,
   });
 
   final DateTime? value;
   final String label;
   final String? helper;
   final bool clearable;
+
+  /// Earliest date the picker offers; defaults to 15 years back.
+  final DateTime? firstDate;
   final ValueChanged<DateTime?> onChanged;
 
   @override
@@ -133,7 +137,7 @@ class DateField extends StatelessWidget {
         final picked = await showDatePicker(
           context: context,
           initialDate: value ?? now,
-          firstDate: DateTime(now.year - 15),
+          firstDate: firstDate ?? DateTime(now.year - 15),
           lastDate: DateTime(now.year + 15),
         );
         if (picked != null) onChanged(picked);

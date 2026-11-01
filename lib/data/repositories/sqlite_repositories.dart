@@ -4,6 +4,7 @@ import '../../domain/models/account.dart';
 import '../../domain/models/credit_line.dart';
 import '../../domain/models/installment_plan.dart';
 import '../../domain/models/payment.dart';
+import '../../domain/models/recurring_charge.dart';
 import '../../domain/models/spending.dart';
 import '../db/app_database.dart';
 import 'repositories.dart';
@@ -156,8 +157,29 @@ class SqliteSpendingRepository implements SpendingRepository {
       conflictAlgorithm: ConflictAlgorithm.replace);
 
   @override
+  Future<void> update(Spending spending) =>
+      _db.db.update('spendings', spending.toMap(), where: 'id = ?', whereArgs: [spending.id]);
+
+  @override
   Future<void> delete(String id) =>
       _db.db.delete('spendings', where: 'id = ?', whereArgs: [id]);
+}
+
+class SqliteRecurringChargeRepository implements RecurringChargeRepository {
+  SqliteRecurringChargeRepository(this._db);
+  final AppDatabase _db;
+
+  @override
+  Future<List<RecurringCharge>> getAll() async {
+    final rows = await _db.db.query('recurring_charges', orderBy: 'created_at');
+    return rows.map(RecurringCharge.fromMap).toList();
+  }
+
+  @override
+  Future<void> save(RecurringCharge charge) => _upsert(_db.db, 'recurring_charges', charge.toMap());
+
+  @override
+  Future<void> delete(String id) => _db.db.delete('recurring_charges', where: 'id = ?', whereArgs: [id]);
 }
 
 class SqliteSettingsRepository implements SettingsRepository {

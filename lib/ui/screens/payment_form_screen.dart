@@ -93,10 +93,13 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
     return null;
   }
 
-  /// The balance was typed in from the bank after this payment, so it
-  /// should not be taken off again.
-  bool _skipBalance(CreditLine? line) =>
-      line != null && line.mayCount(_date) && (_included ?? line.alreadyCounts(_date));
+  /// A backdated payment may already be in a balance copied from the bank
+  /// app, so ask.
+  bool _askBalance(CreditLine? line) =>
+      line != null && (line.mayCount(_date) || _date.isBefore(dateOnly(DateTime.now())));
+
+  /// The balance already has this payment, so it should not be taken off again.
+  bool _skipBalance(CreditLine? line) => _askBalance(line) && (_included ?? line!.alreadyCounts(_date));
 
   CreditLine? _line(AccountSummary a) {
     if (_target == null || !_target!.startsWith('line:')) return null;
@@ -238,14 +241,14 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
                     _suggestAmount(a);
                   }),
                 ),
-                if (line != null && line.mayCount(_date))
+                if (line != null && _askBalance(line))
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     value: _skipBalance(line),
                     onChanged: (v) => setState(() => _included = v),
-                    title: Text(
-                      '${a.account.type.revolvingLabel}ที่แก้ไว้เมื่อ ${fmtDate(line.balanceAsOf!)} หักการจ่ายนี้แล้ว',
-                    ),
+                    title: Text(line.balanceAsOf == null
+                        ? '${a.account.type.revolvingLabel}ที่กรอกไว้หักการจ่ายนี้แล้ว'
+                        : '${a.account.type.revolvingLabel}ที่แก้ไว้เมื่อ ${fmtDate(line.balanceAsOf!)} หักการจ่ายนี้แล้ว'),
                     subtitle: const Text('เปิดไว้ = นับเข้าบิลอย่างเดียว ไม่หักยอดซ้ำ'),
                   ),
                 formGap,

@@ -32,6 +32,8 @@ final paymentRepositoryProvider =
     Provider<PaymentRepository>((ref) => SqlitePaymentRepository(ref.watch(databaseProvider)));
 final spendingRepositoryProvider =
     Provider<SpendingRepository>((ref) => SqliteSpendingRepository(ref.watch(databaseProvider)));
+final recurringChargeRepositoryProvider =
+    Provider<RecurringChargeRepository>((ref) => SqliteRecurringChargeRepository(ref.watch(databaseProvider)));
 final settingsRepositoryProvider =
     Provider<SettingsRepository>((ref) => SqliteSettingsRepository(ref.watch(databaseProvider)));
 
@@ -44,6 +46,7 @@ final ledgerProvider = Provider<LedgerService>((ref) => LedgerService(
       plans: ref.watch(installmentRepositoryProvider),
       payments: ref.watch(paymentRepositoryProvider),
       spendings: ref.watch(spendingRepositoryProvider),
+      recurring: ref.watch(recurringChargeRepositoryProvider),
     ));
 
 final backupServiceProvider = Provider<BackupService>((ref) => BackupService(ref.watch(databaseProvider)));
@@ -54,17 +57,22 @@ final smsGatewayProvider = Provider<SmsGateway>((ref) => SmsGateway());
 /// Everything the screens read, recomputed after each write via
 /// `ref.invalidate(portfolioProvider)`.
 final portfolioProvider = FutureProvider<PortfolioSummary>((ref) async {
+  // Charges that came due since the last look (app opened or resumed, or
+  // any write) become spending before the numbers are read.
+  await ref.watch(ledgerProvider).recordDueCharges();
   final accounts = await ref.watch(accountRepositoryProvider).getAll();
   final lines = await ref.watch(creditLineRepositoryProvider).getAll();
   final plans = await ref.watch(installmentRepositoryProvider).getAll();
   final payments = await ref.watch(paymentRepositoryProvider).getAll();
   final spendings = await ref.watch(spendingRepositoryProvider).getAll();
+  final recurring = await ref.watch(recurringChargeRepositoryProvider).getAll();
   return PortfolioSummary.build(
     accounts: accounts,
     lines: lines,
     plans: plans,
     payments: payments,
     spendings: spendings,
+    recurring: recurring,
     today: DateTime.now(),
   );
 });

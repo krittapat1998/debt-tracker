@@ -22,7 +22,8 @@ flutter test           # unit test สูตรคำนวณ, SMS parser, ฐ�
 | ประวัติ: การจ่ายและยอดใช้จ่ายรวมกัน กรองตามประเภท/บัตร แตะเพื่อเปิดบัตร | `history_screen.dart` |
 | บันทึกการจ่ายแบบเร็ว พร้อมพรีวิวผลกระทบ | `payment_form_screen.dart` |
 | บันทึกยอดใช้จ่าย (ซื้อของ) พร้อมรายละเอียด บวกเข้ายอดคงค้างของวงเงินย่อย ลบแล้วหักคืน; แสดงยอดที่รอเรียกเก็บรอบหน้า (ใช้หลังวันตัดรอบ) | `account_detail_screen.dart`, `lib/domain/models/spending.dart` |
-| ยอดย้อนหลังไม่นับซ้ำ: จำวันที่แก้ยอดคงค้างตามแอพธนาคารล่าสุด ยอดใช้จ่าย/การจ่ายที่ลงวันที่ก่อนวันนั้นเก็บเข้าประวัติอย่างเดียว (วันเดียวกันให้ผู้ใช้เลือก) | `lib/data/services/ledger_service.dart`, `lib/domain/models/credit_line.dart` |
+| ยอดย้อนหลังไม่นับซ้ำ: จำเวลาที่แก้ยอดคงค้างตามแอพธนาคารล่าสุด ยอดใช้จ่าย/การจ่ายที่ลงวันที่ก่อนวันนั้นเก็บเข้าประวัติอย่างเดียว รายการลงวันที่ย้อนหลังมีสวิตช์ให้เลือกเสมอ; แก้ไขยอดใช้จ่ายได้ (แตะรายการ หรือเมนู ⋯) | `lib/data/services/ledger_service.dart`, `lib/domain/models/credit_line.dart` |
+| รายการหักประจำ (Netflix ฯลฯ ทุกเดือน/ทุกปี): บันทึกเป็นยอดใช้จ่ายให้เองเมื่อถึงวันหัก ตามเก็บรอบที่พลาดตอนเปิดแอพ, หยุดชั่วคราว/แก้ไข/ลบได้, ไม่บันทึกซ้ำกับ SMS ธนาคาร | `account_detail_screen.dart`, `lib/domain/models/recurring_charge.dart`, `ledger_service.dart` |
 | คำนวณโปะ: ลดค่าผ่อน vs ผ่อนเท่าเดิมปิดเร็วขึ้น | `calculator_screen.dart`, `lib/domain/finance/prepayment.dart` |
 | แจ้งเตือนก่อนครบกำหนด / วันตัดรอบ / งวดสินเชื่อ | `lib/platform/notification_service.dart` |
 | Export JSON (เข้ารหัส AES-256-GCM ได้) / CSV, กู้คืน | `lib/data/backup/backup_service.dart` |
