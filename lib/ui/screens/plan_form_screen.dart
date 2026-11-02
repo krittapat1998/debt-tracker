@@ -48,6 +48,11 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
   late InterestMethod _method = _orig?.interestMethod ?? InterestMethod.reducing;
   // Promotional rates after the first one: (from installment, rate).
   late final List<(TextEditingController, TextEditingController)> _steps = [
+    if (_orig != null && _orig.rateSteps.isNotEmpty)
+      (
+        TextEditingController(text: '1-${_orig.rateSteps.first.fromInstallment - 1}'),
+        TextEditingController(text: '${_orig.annualRate}'),
+      ),
     for (final (i, s) in (_orig?.rateSteps ?? const <RateStep>[]).indexed)
       (
         TextEditingController(text: '${s.fromInstallment}-${_stepEnd(_orig!, i)}'),
@@ -61,9 +66,10 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
 
   /// "4-6", "04 - 06" or just "4": the first and (optional) last installment.
   static (int, int?)? _parseRange(String text) {
-    final m = RegExp(r'^\s*(\d+)\s*(?:[-–]\s*(\d+))?\s*$').firstMatch(text);
+    final m = RegExp(r'^\s*(\d+)\s*(?:[-–]\s*(\d*))?\s*$').firstMatch(text);
     if (m == null) return null;
-    return (int.parse(m.group(1)!), m.group(2) == null ? null : int.parse(m.group(2)!));
+    final end = m.group(2);
+    return (int.parse(m.group(1)!), end == null || end.isEmpty ? null : int.parse(end));
   }
   // Removed rows stay alive until dispose: their fields may still be mounted.
   final _removedSteps = <TextEditingController>[];
@@ -112,9 +118,21 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
     return byFrom;
   }
 
-  /// Rate of installment 1: a promo row starting at 1 (typed as in the
-  /// bank's paper, "1-3"), else the rate field above.
+  /// Rate of installment 1: with promo periods, the row starting at 1
+  /// ("1-3", as on the bank's paper); otherwise the rate field above.
   double _firstRate() => _promoRows()[1] ?? parseAmount(_rate.text) ?? 0;
+
+  void _setPromo(bool on) => setState(() {
+        _useSteps = on;
+        if (on && _steps.isEmpty) {
+          // Start with the first period at the rate typed so far.
+          _steps
+            ..add((TextEditingController(text: '1-'), TextEditingController(text: _rate.text)))
+            ..add((TextEditingController(), TextEditingController()));
+        }
+        // Back to one rate: keep the first period's.
+        if (!on) _rate.text = '${_firstRate()}'.replaceFirst(RegExp(r'\.0$'), '');
+      });
 
   List<RateStep> _parsedSteps() {
     final rows = _promoRows();
@@ -255,7 +273,16 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
             formGap,
             Row(
               children: [
-                Expanded(child: AmountField(controller: _rate, label: 'ดอกเบี้ยต่อปี', suffix: '%', helper: 'ผ่อน 0% ใส่ 0')),
+                Expanded(
+                  child: AmountField(
+                    controller: _rate,
+                    label: 'ดอกเบี้ยต่อปี',
+                    suffix: '%',
+                    // With promo periods the rows below set every rate.
+                    enabled: !_useSteps,
+                    helper: _useSteps ? 'ตามช่วงงวดด้านล่าง' : 'ผ่อน 0% ใส่ 0',
+                  ),
+                ),
                 const SizedBox(width: 12),
                 Expanded(child: IntField(controller: _term, label: 'จำนวนงวด', suffix: 'เดือน', min: 1, max: 600)),
               ],
@@ -270,13 +297,9 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('ดอกเบี้ยโปรโมชั่นเปลี่ยนตามงวด'),
-                subtitle: const Text('ใส่ตามเอกสารธนาคาร เช่น งวด 1-3 ดอก 21.99% และงวด 4-6 ดอก 24% '
-                    '(ถ้าไม่ใส่ช่วงที่เริ่มงวด 1 จะใช้ช่องดอกเบี้ยด้านบนเป็นดอกของงวดแรก)'),
+                subtitle: const Text('ใส่ตามเอกสารธนาคาร เช่น งวด 1-3 ดอก 21.99% และงวด 4-6 ดอก 24%'),
                 value: _useSteps,
-                onChanged: (v) => setState(() {
-                  _useSteps = v;
-                  if (v && _steps.isEmpty) _steps.add((TextEditingController(), TextEditingController()));
-                }),
+                onChanged: _setPromo,
               ),
               if (_useSteps) ...[
                 for (final (i, (from, rate)) in _steps.indexed)
@@ -294,6 +317,7 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
                             validator: (v) {
                               final range = _parseRange(v ?? '');
                               final term = int.tryParse(_term.text) ?? 600;
+                              if (i == 0 && !_promoRows().containsKey(1)) return 'ช่วงแรกเริ่มงวด 1 เช่น 1-3';
                               if (range == null) return 'ใส่เลขงวด เช่น 4 หรือ 4-6';
                               final (start, end) = range;
                               if (start < 1 || start > term) return 'งวด 1–$term';

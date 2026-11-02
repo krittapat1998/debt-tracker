@@ -16,6 +16,7 @@ class AmountField extends StatelessWidget {
     this.suffix = 'บาท',
     this.onChanged,
     this.autofocus = false,
+    this.enabled = true,
   });
 
   final TextEditingController controller;
@@ -26,11 +27,13 @@ class AmountField extends StatelessWidget {
   final String suffix;
   final ValueChanged<String>? onChanged;
   final bool autofocus;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
     return TextFormField(
       controller: controller,
+      enabled: enabled,
       autofocus: autofocus,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       inputFormatters: [_decimalInput],
