@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/formatters.dart';
+import '../../core/date_utils.dart';
+import '../../domain/finance/payoff_plan.dart';
 import '../../domain/finance/portfolio.dart';
 import '../providers.dart';
 import '../theme.dart';
@@ -10,6 +12,7 @@ import '../widgets/common.dart';
 import 'account_detail_screen.dart';
 import 'account_form_screen.dart';
 import 'payment_form_screen.dart';
+import 'payoff_plan_screen.dart';
 import 'sms_import_screen.dart';
 
 class DashboardScreen extends ConsumerWidget {
@@ -121,15 +124,18 @@ class _PendingBanner extends StatelessWidget {
   }
 }
 
-class _SummaryCard extends StatelessWidget {
+class _SummaryCard extends ConsumerWidget {
   const _SummaryCard({required this.s});
   final PortfolioSummary s;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
     final t = Theme.of(context).textTheme;
     final due = s.monthlyDue;
+    final debts = PayoffDebt.fromPortfolio(s);
+    final extra = ref.watch(payoffExtraProvider).value ?? 0;
+    final debtFree = debts.isEmpty ? null : PayoffPlanner.plan(debts, start: s.today, extra: extra).months;
     return Card(
       color: cs.primaryContainer,
       child: Padding(
@@ -167,6 +173,28 @@ class _SummaryCard extends StatelessWidget {
                 ),
               ],
             ),
+            if (debts.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              InkWell(
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PayoffPlanScreen())),
+                child: Row(
+                  children: [
+                    Icon(Icons.flag_outlined, size: 18, color: cs.onPrimaryContainer),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        debtFree == null
+                            ? 'ตามที่จ่ายอยู่ หนี้ยังไม่หมด · ดูแผนปลดหนี้'
+                            : 'ปลดหนี้หมดประมาณ ${fmtMonthYear(addMonths(s.today, debtFree))}'
+                                '${extra > 0 ? ' (โปะเพิ่มเดือนละ ${fmtMoneyCompact(extra)})' : ''}',
+                        style: t.bodyMedium?.copyWith(color: cs.onPrimaryContainer, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    Icon(Icons.chevron_right, color: cs.onPrimaryContainer),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -255,14 +283,21 @@ class _AvalancheCardState extends State<_AvalancheCard> {
                   style: t.bodySmall?.copyWith(color: cs.warning),
                 ),
               ),
-            if (items.length > 1)
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: () => setState(() => _expanded = !_expanded),
-                  child: Text(_expanded ? 'ซ่อนลำดับ' : 'ดูลำดับที่ควรโปะ (${items.length})'),
+            OverflowBar(
+              alignment: MainAxisAlignment.end,
+              children: [
+                TextButton.icon(
+                  icon: const Icon(Icons.flag_outlined),
+                  label: const Text('วางแผนปลดหนี้'),
+                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PayoffPlanScreen())),
                 ),
-              ),
+                if (items.length > 1)
+                  TextButton(
+                    onPressed: () => setState(() => _expanded = !_expanded),
+                    child: Text(_expanded ? 'ซ่อนลำดับ' : 'ดูลำดับที่ควรโปะ (${items.length})'),
+                  ),
+              ],
+            ),
             if (_expanded)
               for (final (i, d) in items.indexed)
                 ListTile(

@@ -45,6 +45,7 @@ class SettingsService {
   static const _smsSeenKeys = 'sms_seen_keys';
   static const _theme = 'theme';
   static const _appLock = 'app_lock';
+  static const _payoffExtra = 'payoff_extra';
 
   Future<NotificationPrefs> notificationPrefs() async => NotificationPrefs(
         enabled: (await _repo.get(_notifEnabled)) != '0',
@@ -71,6 +72,11 @@ class SettingsService {
   Future<bool> appLockEnabled() async => (await _repo.get(_appLock)) == '1';
 
   Future<void> setAppLockEnabled(bool v) => _repo.set(_appLock, v ? '1' : '0');
+
+  /// What the user can put toward debts each month on top of what is due.
+  Future<double> payoffExtra() async => double.tryParse(await _repo.get(_payoffExtra) ?? '') ?? 0;
+
+  Future<void> setPayoffExtra(double v) => _repo.set(_payoffExtra, '$v');
 
   Future<DateTime?> lastSmsScan() async =>
       DateTime.tryParse(await _repo.get(_smsLastScan) ?? '');

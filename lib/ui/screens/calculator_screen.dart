@@ -13,6 +13,7 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/form_fields.dart';
 import 'payment_form_screen.dart';
+import 'payoff_plan_screen.dart';
 
 /// "If I prepay X, how much interest do I save?" — reduce the installment
 /// vs keep it and finish sooner.
@@ -89,6 +90,17 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen> {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
+              Card(
+                margin: EdgeInsets.zero,
+                child: ListTile(
+                  leading: const Icon(Icons.flag_outlined),
+                  title: const Text('แผนปลดหนี้ทั้งหมด'),
+                  subtitle: const Text('โปะเพิ่มเดือนละเท่าไร หนี้ทุกก้อนจะหมดเมื่อไร'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PayoffPlanScreen())),
+                ),
+              ),
+              formGap,
               SegmentedButton<bool>(
                 segments: [
                   ButtonSegment(value: true, label: const Text('จากรายการผ่อน'), enabled: plans.isNotEmpty),
