@@ -779,6 +779,23 @@ void main() {
     await settle(tester);
   });
 
+  testWidgets('calculator: quick amounts stay under what is owed, and more only pays it off', (tester) async {
+    final p3 = portfolio.byId('a3')!.plans.single;
+    await pump(tester, const CalculatorScreen(initialPlanId: 'p3'));
+    await tester.scrollUntilVisible(find.text('ปิดยอด ${fmtMoney(p3.remainingPrincipal)}'), 300,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.text('฿20,000'), findsOneWidget);
+    expect(find.text('฿50,000'), findsNothing);
+    await tester.enterText(find.widgetWithText(TextFormField, 'จำนวนเงินที่จะโปะเพิ่ม'), '100000');
+    await settle(tester);
+    expect(find.textContaining('โปะเท่านี้ก็ปิดยอดได้'), findsOneWidget);
+    await tester.ensureVisible(find.text('ปิดยอด ${fmtMoney(p3.remainingPrincipal)}'));
+    await settle(tester);
+    await tester.tap(find.text('ปิดยอด ${fmtMoney(p3.remainingPrincipal)}'));
+    await settle(tester);
+    expect(find.textContaining('โปะเท่านี้ก็ปิดยอดได้'), findsNothing);
+  });
+
   testWidgets('calculator: from plan and manual', (tester) async {
     await pump(tester, const CalculatorScreen(initialPlanId: 'p2'));
     await tester.enterText(find.widgetWithText(TextFormField, 'จำนวนเงินที่จะโปะเพิ่ม'), '20000');
