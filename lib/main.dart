@@ -9,7 +9,9 @@ import 'ui/app.dart';
 import 'ui/providers.dart';
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  final binding = WidgetsFlutterBinding.ensureInitialized();
+  // Keeps the native launch screen (the app icon) up a second longer.
+  binding.deferFirstFrame();
   await initializeDateFormatting('th');
   final db = await AppDatabase.open();
   await NotificationService.instance.init();
@@ -18,4 +20,6 @@ Future<void> main() async {
     overrides: [databaseProvider.overrideWithValue(db)],
     child: const DebtTrackerApp(),
   ));
+  await Future<void>.delayed(const Duration(seconds: 1));
+  binding.allowFirstFrame();
 }

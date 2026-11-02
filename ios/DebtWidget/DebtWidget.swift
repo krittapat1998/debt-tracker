@@ -121,7 +121,7 @@ struct DebtWidgetEntryView: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .widgetBackground(Color(red: 0, green: 0.41, blue: 0.36))
+        .widgetBackground(Color(red: 0.008, green: 0.533, blue: 0.820))
     }
 }
 
