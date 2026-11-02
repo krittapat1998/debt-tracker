@@ -142,10 +142,17 @@ class LoanState {
 
   /// Pays one regular installment. [amount] defaults to [nextPaymentDue];
   /// a different amount moves principal accordingly (interest first).
-  InstallmentStep payInstallment([double? amount]) {
+  /// [interest] replaces the month's interest, e.g. counted by actual days.
+  InstallmentStep payInstallment([double? amount, double? interest]) {
     if (isClosed) return InstallmentStep(this, 0, 0, 0);
-    final interest = nextInterest;
-    final paid = amount ?? nextPaymentDue;
+    final owed = interest;
+    if (owed == null) return _pay(amount, nextInterest, nextPaymentDue);
+    final due = remainingTerm <= 1 || payment - owed >= balance ? balance + owed : payment;
+    return _pay(amount, owed, due);
+  }
+
+  InstallmentStep _pay(double? amount, double interest, double due) {
+    final paid = amount ?? due;
     final principalPart = math.min(paid - interest, balance);
     final newBalance = balance - principalPart;
     final next = newBalance <= 0.005
@@ -199,6 +206,7 @@ class LoanState {
     int firstNumber = 1,
     DateTime? Function(int number)? dueDateOf,
     double Function(int number)? rateOf,
+    double? Function(int number, LoanState state)? interestOf,
     bool keepPayment = true,
     int maxRows = 600,
   }) {
@@ -207,7 +215,7 @@ class LoanState {
     var number = firstNumber;
     while (!s.isClosed && rows.length < maxRows) {
       if (rateOf != null) s = s.atRate(rateOf(number), keepPayment: keepPayment);
-      final step = s.payInstallment();
+      final step = s.payInstallment(null, interestOf?.call(number, s));
       if (step.principal <= 0 && step.state.balance >= s.balance) break; // never amortizes
       rows.add(ScheduleRow(
         number: number,

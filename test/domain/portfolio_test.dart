@@ -89,6 +89,49 @@ void main() {
     expect(p.dueCountBy(DateTime(2030)), 11);
   });
 
+  group('interest by actual days', () {
+    // TTB cash chill chill: money in on 15 Jul 2569, first payment 2 Oct.
+    final ttb = InstallmentPlan(id: 'ttb', accountId: 'a', name: 'cash chill chill', principal: 10000, annualRate: 21.99,
+        interestMethod: InterestMethod.reducing, termMonths: 6, monthlyPaymentOverride: 1785,
+        startDate: DateTime(2026, 10, 2), rateSteps: const [RateStep(fromInstallment: 4, annualRate: 24)],
+        disbursedOn: DateTime(2026, 7, 15), createdAt: DateTime(2026, 7, 15));
+
+    test('the first installment carries 79 days of interest, as on the bank schedule', () {
+      expect(ttb.interestDays(1), 79);
+      expect(ttb.interestDays(2), 31);
+      final rows = InstallmentEngine.replay(ttb, const [], asOf: DateTime(2026, 7, 16)).projection;
+      expect(rows.first.interest, 475.95);
+      expect(rows.first.balance, closeTo(8690.95, 0.001));
+      // Days at 24% from installment 4 on.
+      expect(rows[3].interest, closeTo(rows[2].balance * 0.24 * 31 / 365, 0.006));
+      // More interest early: the last installment is bigger, ~฿2,070 at the bank.
+      expect(rows, hasLength(6));
+      expect(rows.last.payment, closeTo(2064.81, 0.01));
+      expect(rows.fold(0.0, (s, r) => s + r.interest), closeTo(989.81, 0.01));
+    });
+
+    test('a card-billed plan counts days to the payment dates, not the cutoffs', () {
+      final card = InstallmentPlan.fromMap({
+        ...ttb.toMap(),
+        'start_date': '2026-08-08',
+        'anchor_day': 8,
+        'included_in_statement': 1,
+        'first_payment_on': '2026-10-02',
+      });
+      expect((card.dueDateOf(1), card.paymentDateOf(1), card.interestDays(1)), (DateTime(2026, 8, 8), DateTime(2026, 10, 2), 79));
+      final rows = InstallmentEngine.replay(card, const [], asOf: DateTime(2026, 7, 16)).projection;
+      expect(rows.first.interest, 475.95);
+      expect(rows.first.dueDate, DateTime(2026, 8, 8));
+    });
+
+    test('without the day the money came in, interest stays monthly', () {
+      final monthly = InstallmentPlan.fromMap({...ttb.toMap(), 'disbursed_on': null});
+      expect(monthly.interestDays(1), isNull);
+      final rows = InstallmentEngine.replay(monthly, const [], asOf: DateTime(2026, 7, 16)).projection;
+      expect(rows.first.interest, closeTo(183.25, 0.001));
+    });
+  });
+
   group('promotional rate steps', () {
     // TTB cash chill chill: ฿10,000 in 6 × ฿1,785, 21.99% for 1–3, 24% for 4–6.
     final ttb = InstallmentPlan(id: 'ttb', accountId: 'a', name: 'cash chill chill', principal: 10000, annualRate: 21.99,

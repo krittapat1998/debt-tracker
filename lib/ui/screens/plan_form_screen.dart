@@ -74,6 +74,11 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
   // Removed rows stay alive until dispose: their fields may still be mounted.
   final _removedSteps = <TextEditingController>[];
   late bool _useSteps = _steps.isNotEmpty;
+  // Interest by actual days, from the day the money came in.
+  late bool _daily = _orig?.disbursedOn != null;
+  late DateTime? _disbursed = _orig?.disbursedOn;
+  late DateTime? _firstPayment = _orig?.firstPaymentOn;
+  bool _dailyDatesMissing = false;
   late bool _useOverride = _orig?.monthlyPaymentOverride != null;
   late bool _included = _orig?.includedInStatement ??
       const {AccountType.creditCard, AccountType.cashCard}.contains(widget.account.account.type);
@@ -180,6 +185,9 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
       anchorDay: anchorDay,
       postedThrough: postedThrough,
       rateSteps: _parsedSteps(),
+      disbursedOn: _dailyOn ? _disbursed : null,
+      // Card-billed dates are cutoffs, so the payment day comes separately.
+      firstPaymentOn: _dailyOn && _included ? _firstPayment : null,
       note: _note.text.trim().isEmpty ? null : _note.text.trim(),
       createdAt: _orig?.createdAt ?? DateTime.now(),
     );
@@ -218,8 +226,12 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
     showSnack(context, 'ใส่เงินต้นประมาณ ${fmtMoney(principal)} แล้ว ถ้ารู้ยอดที่ได้รับจริง แก้เป็นยอดนั้นได้');
   }
 
+  bool get _dailyOn => _daily && _method == InterestMethod.reducing;
+
   Future<void> _save() async {
-    if (!_form.currentState!.validate()) return;
+    final datesMissing = _dailyOn && (_disbursed == null || (_included && _firstPayment == null));
+    setState(() => _dailyDatesMissing = datesMissing);
+    if (!_form.currentState!.validate() || datesMissing) return;
     final plan = _draft();
     if (plan == null) return;
     final ledger = ref.read(ledgerProvider);
@@ -375,6 +387,38 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
                 ),
               formGap,
             ],
+            if (_method == InterestMethod.reducing) ...[
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('คิดดอกตามจำนวนวันจริง (แบบธนาคาร)'),
+                subtitle: const Text('ดอกงวดแรกนับตั้งแต่วันที่ได้รับเงิน ทำให้งวดแรกและงวดสุดท้ายใกล้เคียงตารางผ่อนของธนาคาร'),
+                value: _daily,
+                onChanged: (v) => setState(() => _daily = v),
+              ),
+              if (_daily) ...[
+                DateField(
+                  value: _disbursed,
+                  label: 'วันที่ได้รับเงิน',
+                  helper: _included ? null : 'งวดแรกนับดอกถึง "วันครบกำหนดงวดแรก" ด้านล่าง',
+                  onChanged: (d) => setState(() => _disbursed = d),
+                ),
+                formGap,
+                if (_included) ...[
+                  DateField(
+                    value: _firstPayment,
+                    label: 'วันชำระงวดแรก (ตามตารางธนาคาร)',
+                    helper: 'งวดต่อไปนับดอกถึงวันเดียวกันของทุกเดือน',
+                    onChanged: (d) => setState(() => _firstPayment = d),
+                  ),
+                  formGap,
+                ],
+                if (_dailyDatesMissing && (_disbursed == null || (_included && _firstPayment == null)))
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text('กรุณาเลือกวันที่ให้ครบ', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                  ),
+              ],
+            ],
             _Preview(plan: _draft()),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
@@ -462,9 +506,14 @@ class _Preview extends StatelessWidget {
       termMonths: p.termMonths,
       paymentOverride: p.monthlyPaymentOverride,
     );
-    final interest = s
-        .project(rateOf: InstallmentEngine.rateOf(p), keepPayment: p.monthlyPaymentOverride != null)
-        .fold(0.0, (sum, r) => sum + r.interest);
+    final rows = s.project(
+      rateOf: InstallmentEngine.rateOf(p),
+      interestOf: InstallmentEngine.interestOf(p),
+      keepPayment: p.monthlyPaymentOverride != null,
+    );
+    final interest = rows.fold(0.0, (sum, r) => sum + r.interest);
+    final last = rows.isEmpty ? null : rows.last;
+    final daily = InstallmentEngine.interestOf(p) != null;
     final promo = p.rateSteps.isNotEmpty && p.interestMethod == InterestMethod.reducing;
     final effective = p.interestMethod == InterestMethod.flat
         ? LoanMath.effectiveAnnualRate(p.principal, s.payment, p.termMonths)
@@ -486,9 +535,12 @@ class _Preview extends StatelessWidget {
             const SizedBox(height: 6),
             InfoRow(promo && p.monthlyPaymentOverride == null ? 'ค่าผ่อนงวดแรก' : 'ค่าผ่อนต่อเดือน', fmtMoney(s.payment),
                 bold: true),
+            if (daily && rows.isNotEmpty) InfoRow('ดอกเบี้ยงวดแรก', fmtMoney(rows.first.interest)),
+            if (last != null && rows.length > 1 && (last.payment - s.payment).abs() > 1)
+              InfoRow('งวดสุดท้าย', fmtMoney(last.payment)),
             InfoRow('ดอกเบี้ยรวมทั้งสัญญา', fmtMoney(interest), valueColor: cs.error),
             InfoRow('ยอดชำระรวม', fmtMoney(p.principal + interest)),
-            if (!promo || p.monthlyPaymentOverride != null)
+            if ((!promo || p.monthlyPaymentOverride != null) && !daily)
               InfoRow(promo ? 'ดอกเบี้ยเฉลี่ยทั้งสัญญา' : 'ดอกเบี้ยจริงต่อปี (เทียบแบบลดต้นลดดอก)', '${fmtPercent(effective)}/ปี',
                   bold: true),
             if (p.annualRate > 0 && p.monthlyPaymentOverride == null && !promo)

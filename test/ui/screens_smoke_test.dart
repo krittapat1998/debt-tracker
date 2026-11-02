@@ -630,6 +630,33 @@ void main() {
     expect((saved.annualRate, saved.rateSteps.single.fromInstallment, saved.rateSteps.single.annualRate), (21.99, 4, 24.0));
   });
 
+  testWidgets('plan form: interest by actual days needs its dates, and previews the long first period', (tester) async {
+    final ledger = _RecordingLedger();
+    final plan = InstallmentPlan(id: 'ttb', accountId: 'a2', name: 'cash chill chill', principal: 10000, annualRate: 21.99,
+        interestMethod: InterestMethod.reducing, termMonths: 6, monthlyPaymentOverride: 1785,
+        startDate: DateTime(2026, 10, 2), createdAt: DateTime(2026, 7, 15));
+    await pump(tester, PlanFormScreen(account: portfolio.byId('a2')!, existing: plan), ledger: ledger);
+    await tester.scrollUntilVisible(find.text('คิดดอกตามจำนวนวันจริง (แบบธนาคาร)'), 200, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('คิดดอกตามจำนวนวันจริง (แบบธนาคาร)'));
+    await settle(tester);
+    await tester.scrollUntilVisible(find.text('บันทึก'), 500, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('บันทึก'));
+    await settle(tester);
+    expect(ledger.savedPlans, isEmpty);
+    await tester.scrollUntilVisible(find.text('กรุณาเลือกวันที่ให้ครบ'), -200, scrollable: find.byType(Scrollable).first);
+    expect(find.text('กรุณาเลือกวันที่ให้ครบ'), findsOneWidget);
+  });
+
+  testWidgets('plan form: a plan counting days shows its first-period interest', (tester) async {
+    final plan = InstallmentPlan(id: 'ttb', accountId: 'a2', name: 'cash chill chill', principal: 10000, annualRate: 21.99,
+        interestMethod: InterestMethod.reducing, termMonths: 6, monthlyPaymentOverride: 1785,
+        startDate: DateTime(2026, 10, 2), disbursedOn: DateTime(2026, 7, 15), createdAt: DateTime(2026, 7, 15));
+    await pump(tester, PlanFormScreen(account: portfolio.byId('a2')!, existing: plan));
+    await tester.scrollUntilVisible(find.text('ดอกเบี้ยงวดแรก'), 200, scrollable: find.byType(Scrollable).first);
+    expect(find.widgetWithText(InfoRow, '฿475.95'), findsOneWidget);
+    expect(find.text('งวดสุดท้าย'), findsOneWidget);
+  });
+
   testWidgets('plan form: editing a promo plan shows every period as a row', (tester) async {
     final plan = InstallmentPlan(id: 'ttb', accountId: 'a2', name: 'cash chill chill', principal: 10000, annualRate: 21.99,
         interestMethod: InterestMethod.reducing, termMonths: 6, monthlyPaymentOverride: 1785,
@@ -726,6 +753,7 @@ void main() {
     expect(find.text('วันครบกำหนดงวดแรก'), findsNothing);
     await tester.scrollUntilVisible(find.text('บัตรแจ้งถึงงวดที่'), 300, scrollable: find.byType(Scrollable).first);
     await tester.enterText(find.widgetWithText(TextFormField, 'บัตรแจ้งถึงงวดที่'), '3');
+    await tester.scrollUntilVisible(find.text('ไม่ระบุ'), -100, scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('ไม่ระบุ'));
     await settle(tester);
     await tester.tap(find.text('วันที่ 5').last);
