@@ -1116,7 +1116,7 @@ class _PlanCardState extends ConsumerState<_PlanCard> {
   }
 }
 
-/// One row of payment history; long-press or the menu deletes it.
+/// One row of payment history: tap or the menu edits it, long-press deletes.
 class PaymentTile extends ConsumerWidget {
   const PaymentTile({super.key, required this.payment, required this.summary, this.showAccount = false, this.onTap});
   final Payment payment;
@@ -1161,15 +1161,21 @@ class PaymentTile extends ConsumerWidget {
       title: Text('${fmtMoney(p.amount)} · ${p.type.label}'),
       subtitle: Text([fmtDate(p.date), if (details.isNotEmpty) details.join(' · ')].join('\n')),
       isThreeLine: details.isNotEmpty,
-      trailing: IconButton(
-        icon: const Icon(Icons.delete_outline),
-        tooltip: 'ลบ',
-        onPressed: () => _delete(context, ref),
+      trailing: PopupMenuButton<bool>(
+        tooltip: 'แก้ไขหรือลบ',
+        onSelected: (edit) => edit ? _edit(context) : _delete(context, ref),
+        itemBuilder: (_) => const [
+          PopupMenuItem(value: true, child: Text('แก้ไข')),
+          PopupMenuItem(value: false, child: Text('ลบ')),
+        ],
       ),
-      onTap: onTap,
+      onTap: onTap ?? () => _edit(context),
       onLongPress: () => _delete(context, ref),
     );
   }
+
+  void _edit(BuildContext context) =>
+      Navigator.push(context, MaterialPageRoute(builder: (_) => PaymentFormScreen(existing: payment)));
 
   Future<void> _delete(BuildContext context, WidgetRef ref) async {
     final ok = await confirmDialog(

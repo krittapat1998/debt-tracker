@@ -73,5 +73,15 @@ class LoanMath {
     return (n - 1e-9).ceil();
   }
 
+  /// The principal that [months] payments of [payment] repay: the inverse
+  /// of [amortizedPayment] (reducing) or [flatMonthlyPayment] (flat).
+  static double principalForPayment(double payment, double annualPercent, int months, {bool flat = false}) {
+    if (months <= 0 || payment <= 0) return 0;
+    if (flat) return payment / (1 / months + annualPercent / 1200);
+    final r = monthlyRate(annualPercent);
+    if (r.abs() < _eps) return payment * months;
+    return payment * (1 - math.pow(1 + r, -months)) / r;
+  }
+
   static double round2(double v) => (v * 100).roundToDouble() / 100;
 }

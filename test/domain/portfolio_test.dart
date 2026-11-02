@@ -80,6 +80,15 @@ Payment pay(String accountId, DateTime date, double amount, PaymentType type,
     );
 
 void main() {
+  test('dueCountBy counts installments due on or before a day, up to the term', () {
+    final p = InstallmentPlan(id: 'u', accountId: 'a', name: 'UOB Express', principal: 30000, annualRate: 25,
+        interestMethod: InterestMethod.reducing, termMonths: 11, startDate: DateTime(2026, 10, 1), createdAt: DateTime(2026));
+    expect(p.dueCountBy(DateTime(2026, 9, 30)), 0);
+    expect(p.dueCountBy(DateTime(2026, 11, 2)), 2);
+    expect(p.dueCountBy(DateTime(2026, 12, 1, 18)), 3);
+    expect(p.dueCountBy(DateTime(2030)), 11);
+  });
+
   group('InstallmentEngine.replay', () {
     final p = plan('loan', 'a');
     final m = LoanMath.amortizedPayment(12000, 0.01, 12);

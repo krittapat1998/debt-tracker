@@ -35,6 +35,7 @@ abstract interface class PaymentRepository {
   Future<List<Payment>> getAll();
   Future<Payment?> getById(String id);
   Future<void> insert(Payment payment);
+  Future<void> update(Payment payment);
   Future<void> delete(String id);
 }
 

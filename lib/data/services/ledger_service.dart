@@ -83,17 +83,22 @@ class LedgerService {
   /// payment date and so already has it ([alreadyInBalance] overrides that
   /// guess). Plan payments are picked up by the installment replay.
   Future<Payment> recordPayment(Payment draft, {bool? alreadyInBalance}) async {
-    var applied = 0.0;
-    if (draft.planId == null && draft.creditLineId != null) {
-      final line = await lines.getById(draft.creditLineId!);
-      if (line != null && !(alreadyInBalance ?? line.alreadyCounts(draft.date))) {
-        applied = math.min(draft.amount, math.max(0.0, line.balance));
-        await lines.update(line.copyWith(balance: line.balance - applied));
-      }
-    }
-    final payment = draft.copyWith(lineBalanceApplied: applied);
+    final payment = await _applyPayment(draft, (line) => alreadyInBalance ?? line.alreadyCounts(draft.date));
     await payments.insert(payment);
     return payment;
+  }
+
+  /// Corrects a payment (date, amount, type, target, or whether the
+  /// balance already had it): gives back what the old one took off and
+  /// applies the new one. A balance typed in from the bank after the
+  /// payment was recorded is left alone.
+  Future<Payment> updatePayment(Payment payment, {required bool alreadyInBalance}) async {
+    final old = await payments.getById(payment.id);
+    if (old != null) await _giveBackPayment(old);
+    final since = old?.createdAt ?? payment.createdAt;
+    final saved = await _applyPayment(payment, (line) => alreadyInBalance || line.typedInAfter(since));
+    await payments.update(saved);
+    return saved;
   }
 
   /// Deletes a payment and restores exactly what it took off the balance,
@@ -101,12 +106,7 @@ class LedgerService {
   Future<void> deletePayment(String id) async {
     final p = await payments.getById(id);
     if (p == null) return;
-    if (p.lineBalanceApplied > 0 && p.creditLineId != null) {
-      final line = await lines.getById(p.creditLineId!);
-      if (line != null && !line.typedInAfter(p.createdAt)) {
-        await lines.update(line.copyWith(balance: line.balance + p.lineBalanceApplied));
-      }
-    }
+    await _giveBackPayment(p);
     await payments.delete(id);
   }
 
@@ -294,6 +294,27 @@ class LedgerService {
       }
     }
     return spending.copyWith(lineBalanceApplied: applied);
+  }
+
+  /// Takes a revolving [payment] off its sub-limit unless [skip] says the
+  /// balance has it. Plan payments only feed the installment replay.
+  Future<Payment> _applyPayment(Payment payment, bool Function(CreditLine line) skip) async {
+    var applied = 0.0;
+    if (payment.planId == null && payment.creditLineId != null) {
+      final line = await lines.getById(payment.creditLineId!);
+      if (line != null && !skip(line)) {
+        applied = math.min(payment.amount, math.max(0.0, line.balance));
+        await lines.update(line.copyWith(balance: line.balance - applied));
+      }
+    }
+    return payment.copyWith(lineBalanceApplied: applied);
+  }
+
+  Future<void> _giveBackPayment(Payment p) async {
+    if (p.lineBalanceApplied <= 0 || p.creditLineId == null) return;
+    final line = await lines.getById(p.creditLineId!);
+    if (line == null || line.typedInAfter(p.createdAt)) return;
+    await lines.update(line.copyWith(balance: line.balance + p.lineBalanceApplied));
   }
 
   Future<void> _takeBackSpending(Spending s) async {

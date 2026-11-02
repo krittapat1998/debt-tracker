@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -49,6 +51,12 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
   late int? _billingDay = widget.account.account.billingDay;
   late String? _lineId = _orig?.creditLineId ?? (widget.account.lines.isEmpty ? null : widget.account.lines.first.id);
   late DateTime _start = _orig?.startDate ?? _defaultStart();
+  // Installments of this plan already logged as payments in the app.
+  late final int _recorded = _orig == null
+      ? 0
+      : widget.account.payments
+          .where((p) => p.planId == _orig.id && const {PaymentType.installment, PaymentType.minimum, PaymentType.other}.contains(p.type))
+          .length;
 
   DateTime _defaultStart() {
     final dd = widget.account.account.dueDay;
@@ -107,6 +115,39 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
     );
   }
 
+  /// Enough of a draft to lay out due dates while เงินต้น is still empty.
+  InstallmentPlan? _draftDates() {
+    final term = int.tryParse(_term.text);
+    if (term == null || term <= 0) return null;
+    return InstallmentPlan(
+      id: '',
+      accountId: widget.account.account.id,
+      name: '',
+      principal: 1,
+      annualRate: 0,
+      interestMethod: _method,
+      termMonths: term,
+      startDate: _start,
+      paidBeforeTracking: int.tryParse(_paidBefore.text) ?? 0,
+      createdAt: DateTime.now(),
+    );
+  }
+
+  bool get _canFillPrincipal =>
+      (parseAmount(_override.text) ?? 0) > 0 && parseAmount(_rate.text) != null && (int.tryParse(_term.text) ?? 0) > 0;
+
+  /// Fills เงินต้นตั้งต้น from the bank's installment, rate and term.
+  void _fillPrincipal() {
+    final principal = LoanMath.round2(LoanMath.principalForPayment(
+      parseAmount(_override.text)!,
+      parseAmount(_rate.text)!,
+      int.parse(_term.text),
+      flat: _method == InterestMethod.flat,
+    ));
+    setState(() => _principal.text = amountToField(principal));
+    showSnack(context, 'ใส่เงินต้นประมาณ ${fmtMoney(principal)} แล้ว ถ้ารู้ยอดที่ได้รับจริง แก้เป็นยอดนั้นได้');
+  }
+
   Future<void> _save() async {
     if (!_form.currentState!.validate()) return;
     final plan = _draft();
@@ -152,7 +193,13 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
               ),
               formGap,
             ],
-            AmountField(controller: _principal, label: 'เงินต้นตั้งต้น', required: true, allowZero: false),
+            AmountField(
+              controller: _principal,
+              label: 'เงินต้นตั้งต้น',
+              helper: 'ยอดที่ได้ตอนเริ่มผ่อน ไม่รู้ก็ได้ ใส่ค่าผ่อนต่อเดือนด้านล่างแล้วให้แอพคำนวณ',
+              required: true,
+              allowZero: false,
+            ),
             formGap,
             Row(
               children: [
@@ -176,6 +223,15 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
             ),
             if (_useOverride) ...[
               AmountField(controller: _override, label: 'ค่าผ่อนต่อเดือน', required: true, allowZero: false),
+              if (_canFillPrincipal)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    icon: const Icon(Icons.calculate_outlined),
+                    label: const Text('ไม่รู้เงินต้น? คำนวณจากค่าผ่อนนี้'),
+                    onPressed: _fillPrincipal,
+                  ),
+                ),
               formGap,
             ],
             _Preview(plan: _draft()),
@@ -216,8 +272,13 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
               IntField(
                 controller: _paidBefore,
                 label: 'จ่ายไปแล้วกี่งวด (ก่อนเริ่มใช้แอพ)',
-                helper: 'งวดเหล่านี้จะถือว่าจ่ายครบตามตาราง',
+                helper: 'งวดเหล่านี้จะถือว่าจ่ายครบตามตาราง ไม่ต้องนับงวดที่บันทึกการจ่ายในแอพแล้ว',
                 max: 600,
+              ),
+              _PaidCheck(
+                plan: _draft() ?? _draftDates(),
+                recorded: _recorded,
+                onUse: (n) => setState(() => _paidBefore.text = '$n'),
               ),
             ],
             SectionHeader('เงื่อนไขปิดก่อนกำหนด'),
@@ -296,6 +357,60 @@ class _Preview extends StatelessWidget {
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Says which installments the app will count as paid, and warns when that
+/// runs past what is due by today or misses installments already due.
+class _PaidCheck extends StatelessWidget {
+  const _PaidCheck({required this.plan, required this.recorded, required this.onUse});
+  final InstallmentPlan? plan;
+
+  /// Installments already logged as payments; they count after [plan]'s
+  /// paid-before ones.
+  final int recorded;
+  final ValueChanged<int> onUse;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = plan;
+    if (p == null) return const SizedBox.shrink();
+    final t = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+    final before = math.min(p.paidBeforeTracking, p.termMonths);
+    final total = math.min(before + recorded, p.termMonths);
+    final due = p.dueCountBy(DateTime.now());
+    final fix = math.max(0, due - recorded);
+    final info = [
+      if (before == 1) 'แอพจะติ๊กงวดที่ 1 ว่าจ่ายแล้ว (ครบกำหนด ${fmtDate(p.dueDateOf(1))})',
+      if (before > 1) 'แอพจะติ๊กงวด 1–$before ว่าจ่ายแล้ว (งวดที่ $before ครบกำหนด ${fmtDate(p.dueDateOf(before))})',
+      if (recorded > 0) 'บวกค่างวดที่บันทึกในแอพแล้ว $recorded ครั้ง รวมจ่ายแล้ว $total งวด',
+      'ถึงวันนี้ครบกำหนดแล้ว $due งวด',
+    ];
+    final warning = total > due
+        ? 'นับว่าจ่ายแล้วเกินงวดที่ครบกำหนด ${total - due} งวด'
+            '${recorded > 0 ? ' ถ้าค่างวดที่บันทึกในแอพเป็นงวดเดียวกับที่ใส่ตรงนี้' : ' ถ้ายังไม่ได้จ่ายล่วงหน้า'} ให้ใส่ $fix'
+        : total < due
+            ? 'อีก ${due - total} งวดที่ครบกำหนดแล้วจะขึ้นว่าเลยกำหนด ถ้าจ่ายไปแล้วให้ใส่ $fix'
+            : null;
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(info.join('\n'), style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+          if (warning != null)
+            Row(
+              children: [
+                Icon(Icons.warning_amber, size: 18, color: cs.warning),
+                const SizedBox(width: 6),
+                Expanded(child: Text(warning, style: t.bodySmall?.copyWith(color: cs.warning))),
+                if (fix != p.paidBeforeTracking) TextButton(onPressed: () => onUse(fix), child: Text('ใส่ $fix')),
+              ],
+            ),
+        ],
       ),
     );
   }
