@@ -114,6 +114,9 @@ class AppLockNotifier extends Notifier<bool> {
 
 final appLockProvider = NotifierProvider<AppLockNotifier, bool>(AppLockNotifier.new);
 
+/// Monthly extra for the debt-free plan (แผนปลดหนี้).
+final payoffExtraProvider = FutureProvider<double>((ref) => ref.watch(settingsServiceProvider).payoffExtra());
+
 final notificationPrefsProvider =
     FutureProvider<NotificationPrefs>((ref) => ref.watch(settingsServiceProvider).notificationPrefs());
 

@@ -22,6 +22,7 @@ import 'package:debt_tracker/ui/screens/calculator_screen.dart';
 import 'package:debt_tracker/ui/screens/dashboard_screen.dart';
 import 'package:debt_tracker/ui/screens/history_screen.dart';
 import 'package:debt_tracker/ui/screens/payment_form_screen.dart';
+import 'package:debt_tracker/ui/screens/payoff_plan_screen.dart';
 import 'package:debt_tracker/ui/screens/plan_form_screen.dart';
 import 'package:debt_tracker/ui/screens/schedule_screen.dart';
 import 'package:debt_tracker/ui/screens/settings_screen.dart';
@@ -666,6 +667,7 @@ void main() {
     await pump(tester, const CalculatorScreen(initialPlanId: 'p2'));
     await tester.enterText(find.widgetWithText(TextFormField, 'จำนวนเงินที่จะโปะเพิ่ม'), '20000');
     await settle(tester);
+    await tester.scrollUntilVisible(find.text('ประหยัดดอกกว่า'), 300, scrollable: find.byType(Scrollable).first);
     expect(find.text('ประหยัดดอกกว่า'), findsOneWidget);
     await tester.drag(find.byType(ListView).first, const Offset(0, -2000));
     await settle(tester);
@@ -691,6 +693,25 @@ void main() {
     expect(find.textContaining('โปะ'), findsWidgets);
     await pump(tester, const SettingsScreen());
     await pump(tester, const SmsPatternsScreen());
+  });
+
+  testWidgets('debt-free plan: a monthly extra brings the date closer and is remembered', (tester) async {
+    final container = await pump(tester, const PayoffPlanScreen());
+    expect(find.text('ปลดหนี้หมด'), findsOneWidget);
+    String date() => tester.widget<Text>(find.byWidgetPredicate(
+        (w) => w is Text && (w.data ?? '').contains(RegExp(r'^\S+ 25\d\d$')))).data!;
+    final before = date();
+    await tester.tap(find.text('+฿2,000'));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await settle(tester);
+    expect(date(), isNot(before));
+    expect(find.text('ประหยัดดอกเบี้ย'), findsOneWidget);
+    expect(find.textContaining('เร็วกว่าจ่ายแค่ขั้นต่ำ'), findsOneWidget);
+    await tester.scrollUntilVisible(find.textContaining('โปะอันนี้ก่อน'), 300, scrollable: find.byType(Scrollable).first);
+    // First Choice's 25.98% loan is the most expensive one that may be prepaid.
+    expect(find.descendant(of: find.widgetWithText(ListTile, 'First Choice · สินเชื่อก้อน'), matching: find.textContaining('โปะอันนี้ก่อน')),
+        findsOneWidget);
+    expect(await tester.runAsync(() => container.read(settingsServiceProvider).payoffExtra()), 2000);
   });
 
   testWidgets('settings speak plainly, and the SMS tester reads a bank message', (tester) async {
