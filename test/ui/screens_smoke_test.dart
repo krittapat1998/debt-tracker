@@ -19,6 +19,7 @@ import 'package:debt_tracker/ui/providers.dart';
 import 'package:debt_tracker/ui/screens/account_detail_screen.dart';
 import 'package:debt_tracker/ui/screens/account_form_screen.dart';
 import 'package:debt_tracker/ui/screens/calculator_screen.dart';
+import 'package:debt_tracker/ui/screens/calendar_screen.dart';
 import 'package:debt_tracker/ui/screens/dashboard_screen.dart';
 import 'package:debt_tracker/ui/screens/history_screen.dart';
 import 'package:debt_tracker/ui/screens/payment_form_screen.dart';
@@ -693,6 +694,26 @@ void main() {
     expect(find.textContaining('โปะ'), findsWidgets);
     await pump(tester, const SettingsScreen());
     await pump(tester, const SmsPatternsScreen());
+  });
+
+  testWidgets('calendar: next month lists card bills still to come; a day shows only its own', (tester) async {
+    await pump(tester, const CalendarScreen());
+    expect(find.text('ปฏิทินครบกำหนด'), findsOneWidget);
+    expect(find.text('ทั้งเดือน'), findsOneWidget);
+    await tester.tap(find.byTooltip('เดือนถัดไป'));
+    await settle(tester);
+    // Next month's bills are not out yet: no amount.
+    await tester.scrollUntilVisible(find.text('รอบิล').first, 300, scrollable: find.byType(Scrollable).first);
+    expect(find.text('รอบิล'), findsWidgets);
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, 2000));
+    await settle(tester);
+    await tester.tap(find.text('5'));
+    await settle(tester);
+    expect(find.text('ดูทั้งเดือน'), findsOneWidget);
+    final next = addMonths(DateTime.now(), 1);
+    expect(find.text(fmtDate(DateTime(next.year, next.month, 5))), findsOneWidget);
+    expect(find.text('KTC Visa Platinum'), findsOneWidget);
+    expect(find.text('UOB Preferred Platinum'), findsNothing);
   });
 
   testWidgets('debt-free plan: a monthly extra brings the date closer and is remembered', (tester) async {
