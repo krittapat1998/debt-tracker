@@ -1,9 +1,12 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/date_utils.dart';
 import '../../core/formatters.dart';
 import '../../domain/finance/installment_engine.dart';
+import '../../domain/finance/loan_math.dart';
 import '../../domain/finance/loan_state.dart';
 import '../../domain/finance/portfolio.dart';
 import '../../domain/finance/prepayment.dart';
@@ -85,7 +88,10 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen> {
           }
           final selected = _fromPlan ? plans.firstWhere((e) => e.$2.plan.id == _planId) : null;
           final state = selected?.$2.current ?? _manualState();
-          final extra = parseAmount(_extra.text) ?? 0;
+          final typed = parseAmount(_extra.text) ?? 0;
+          // More than is owed only pays it off; the rest is not needed.
+          final over = state != null && typed > state.balance + 0.005;
+          final extra = over ? LoanMath.round2(state.balance) : typed;
 
           return ListView(
             padding: const EdgeInsets.all(16),
@@ -135,13 +141,21 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen> {
                 label: 'จำนวนเงินที่จะโปะเพิ่ม',
                 onChanged: (_) => setState(() {}),
               ),
+              if (over)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    'เงินต้นคงเหลือแค่ ${fmtMoney(state.balance)} โปะเท่านี้ก็ปิดยอดได้ ส่วนที่เกินไม่ต้องจ่าย',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.warning),
+                  ),
+                ),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
                 children: [
-                  for (final v in [5000.0, 10000.0, 20000.0, 50000.0])
+                  for (final (label, v) in _quickAmounts(state))
                     ActionChip(
-                      label: Text(fmtMoneyCompact(v)),
+                      label: Text(label),
                       onPressed: () => setState(() => _extra.text = amountToField(v)),
                     ),
                 ],
@@ -163,6 +177,18 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen> {
         },
       ),
     );
+  }
+
+  /// Round amounts under what is owed (the three largest), then paying it
+  /// all off, so a ฿7,000 loan never offers ฿20,000.
+  List<(String, double)> _quickAmounts(LoanState? s) {
+    const steps = [1000.0, 2000.0, 5000.0, 10000.0, 20000.0, 50000.0, 100000.0];
+    if (s == null || s.isClosed) return [for (final v in const [5000.0, 10000.0, 20000.0]) (fmtMoneyCompact(v), v)];
+    final below = steps.where((v) => v < s.balance - 0.005).toList();
+    return [
+      for (final v in below.skip(math.max(0, below.length - 3))) (fmtMoneyCompact(v), v),
+      ('ปิดยอด ${fmtMoney(s.balance)}', LoanMath.round2(s.balance)),
+    ];
   }
 
   /// Penalty only applies when the prepayment closes the plan early.
@@ -222,8 +248,9 @@ class _CurrentCard extends StatelessWidget {
             const SizedBox(height: 6),
             InfoRow('เงินต้นคงเหลือ', fmtMoney(state.balance), bold: true),
             InfoRow('ค่าผ่อน/เดือน', fmtMoney(state.payment)),
-            InfoRow('งวดคงเหลือ', fmtMonths(state.projectedMonths)),
-            InfoRow('ดอกเบี้ยที่ต้องจ่ายอีก', fmtMoney(state.projectedInterest), valueColor: cs.error),
+            InfoRow('งวดคงเหลือ', fmtMonths(p?.remainingInstallments ?? state.projectedMonths)),
+            InfoRow('ดอกเบี้ยที่ต้องจ่ายอีก', fmtMoney(p?.projectedRemainingInterest ?? state.projectedInterest),
+                valueColor: cs.error),
             if (state.method == InterestMethod.flat)
               Padding(
                 padding: const EdgeInsets.only(top: 6),
