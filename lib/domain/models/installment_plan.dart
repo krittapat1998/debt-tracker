@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import '../../core/date_utils.dart';
 import 'enums.dart';
@@ -40,6 +41,8 @@ class InstallmentPlan {
     this.anchorDay,
     this.postedThrough,
     this.rateSteps = const [],
+    this.disbursedOn,
+    this.firstPaymentOn,
     this.note,
     required this.createdAt,
   });
@@ -98,6 +101,16 @@ class InstallmentPlan {
   /// Later rates of a promotional plan, by first installment; before the
   /// first step the plan charges [annualRate]. Reducing balance only.
   final List<RateStep> rateSteps;
+
+  /// Day the money came in. When set, interest is charged by actual days
+  /// (balance × rate × days / 365) as banks do, the first installment
+  /// counting from this day.
+  final DateTime? disbursedOn;
+
+  /// Day the first installment is paid, by the bank's schedule; later ones
+  /// fall on the same day each month. Only needed where [startDate] is not
+  /// the payment day (card-billed plans, whose dates are cutoffs).
+  final DateTime? firstPaymentOn;
   final String? note;
   final DateTime createdAt;
 
@@ -111,6 +124,21 @@ class InstallmentPlan {
       if (n >= s.fromInstallment) rate = s.annualRate;
     }
     return rate;
+  }
+
+  /// The day installment [n] is paid, for counting interest days.
+  DateTime paymentDateOf(int n) {
+    final first = firstPaymentOn;
+    return first == null ? dueDateOf(n) : addMonths(first, n - 1, anchorDay: first.day);
+  }
+
+  /// Days of interest in installment [n]: since the money came in for the
+  /// first, since the previous payment for the rest. Null when interest is
+  /// counted by months.
+  int? interestDays(int n) {
+    final from = n <= 1 ? disbursedOn : paymentDateOf(n - 1);
+    if (disbursedOn == null || from == null) return null;
+    return math.max(0, daysBetween(from, paymentDateOf(n)));
   }
 
   /// How many installments fall due on or before [day].
@@ -142,6 +170,8 @@ class InstallmentPlan {
         anchorDay: anchorDay ?? this.anchorDay,
         postedThrough: postedThrough ?? this.postedThrough,
         rateSteps: rateSteps,
+        disbursedOn: disbursedOn,
+        firstPaymentOn: firstPaymentOn,
         note: note,
         createdAt: createdAt,
       );
@@ -168,6 +198,8 @@ class InstallmentPlan {
         'anchor_day': anchorDay,
         'posted_through': postedThrough,
         'rate_steps': rateSteps.isEmpty ? null : jsonEncode([for (final s in rateSteps) s.toJson()]),
+        'disbursed_on': disbursedOn == null ? null : isoDate(disbursedOn!),
+        'first_payment_on': firstPaymentOn == null ? null : isoDate(firstPaymentOn!),
         'note': note,
         'created_at': createdAt.toIso8601String(),
       };
@@ -198,6 +230,8 @@ class InstallmentPlan {
                 for (final s in jsonDecode(m['rate_steps'] as String) as List)
                   RateStep.fromJson((s as Map).cast<String, Object?>()),
               ]..sort((a, b) => a.fromInstallment.compareTo(b.fromInstallment))),
+        disbursedOn: parseIsoDate(m['disbursed_on']),
+        firstPaymentOn: parseIsoDate(m['first_payment_on']),
         note: m['note'] as String?,
         createdAt: DateTime.parse(m['created_at'] as String),
       );

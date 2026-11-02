@@ -40,7 +40,11 @@ class InstallmentState {
 
   /// Interest of the original contract if no prepayment ever happened.
   double get originalTotalInterest => initial
-      .project(rateOf: InstallmentEngine.rateOf(plan), keepPayment: plan.monthlyPaymentOverride != null)
+      .project(
+        rateOf: InstallmentEngine.rateOf(plan),
+        interestOf: InstallmentEngine.interestOf(plan),
+        keepPayment: plan.monthlyPaymentOverride != null,
+      )
       .fold(0.0, (s, r) => s + r.interest);
 
   /// Interest already avoided thanks to prepayments so far.
@@ -86,6 +90,13 @@ class InstallmentEngine {
   static double Function(int)? rateOf(InstallmentPlan plan) =>
       plan.rateSteps.isEmpty || plan.interestMethod != InterestMethod.reducing ? null : plan.rateFor;
 
+  /// Interest by actual days (balance × rate × days / 365, to the satang),
+  /// as banks charge it; null when the plan counts by months.
+  static double? Function(int, LoanState)? interestOf(InstallmentPlan plan) =>
+      plan.disbursedOn == null || plan.interestMethod != InterestMethod.reducing
+          ? null
+          : (n, s) => LoanMath.round2(s.balance * s.annualRate / 100 * (plan.interestDays(n) ?? 0) / 365);
+
   static LoanState initialState(InstallmentPlan plan) => LoanState.initial(
         method: plan.interestMethod,
         principal: plan.principal,
@@ -111,12 +122,13 @@ class InstallmentEngine {
     var extraPaid = 0.0;
 
     final rates = rateOf(plan);
+    final daily = interestOf(plan);
     final keepPayment = plan.monthlyPaymentOverride != null;
 
     void applyInstallment({double? amount, DateTime? paidOn, bool automatic = false}) {
       final number = paidRows.length + 1;
       if (rates != null) state = state.atRate(rates(number), keepPayment: keepPayment);
-      final step = state.payInstallment(amount);
+      final step = state.payInstallment(amount, daily?.call(number, state));
       paidRows.add(ScheduleRow(
         number: number,
         dueDate: plan.dueDateOf(number),
@@ -184,6 +196,7 @@ class InstallmentEngine {
       firstNumber: paidRows.length + 1,
       dueDateOf: plan.dueDateOf,
       rateOf: rates,
+      interestOf: daily,
       keepPayment: keepPayment,
     );
 

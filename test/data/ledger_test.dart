@@ -588,7 +588,7 @@ void main() {
 
     final upgraded = await AppDatabase.open(factory: databaseFactoryFfi, path: path);
     addTearDown(upgraded.close);
-    expect(await upgraded.db.getVersion(), 7);
+    expect(await upgraded.db.getVersion(), 8);
     expect(await upgraded.db.query('accounts'), [
       {'id': 'old', 'name': 'KTC', 'color': null},
     ]);
@@ -620,7 +620,7 @@ void main() {
 
     final upgraded = await AppDatabase.open(factory: databaseFactoryFfi, path: path);
     addTearDown(upgraded.close);
-    expect(await upgraded.db.getVersion(), 7);
+    expect(await upgraded.db.getVersion(), 8);
     expect((await SqliteSpendingRepository(upgraded).getAll()).single.lineBalanceApplied, 1200);
     expect((await SqliteCreditLineRepository(upgraded).getAll()).single.balanceAsOf, isNull);
   });
