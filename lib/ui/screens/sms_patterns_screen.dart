@@ -28,8 +28,8 @@ const _template = '''{
   ]
 }''';
 
-/// Shows the bundled bank senders and lets the user add their own regex
-/// patterns (stored locally), with a live tester.
+/// Lets the user try a bank SMS against the parser. Advanced users can add
+/// their own regex patterns (stored locally) in a collapsed section.
 class SmsPatternsScreen extends ConsumerStatefulWidget {
   const SmsPatternsScreen({super.key});
 
@@ -70,7 +70,7 @@ class _SmsPatternsScreenState extends ConsumerState<SmsPatternsScreen> {
     try {
       _custom();
     } catch (e) {
-      setState(() => _error = 'JSON/regex ไม่ถูกต้อง: $e');
+      setState(() => _error = _invalid(e));
       return;
     }
     await ref.read(settingsServiceProvider).setCustomSmsPatterns(_json.text.trim().isEmpty ? null : _json.text.trim());
@@ -94,9 +94,9 @@ class _SmsPatternsScreenState extends ConsumerState<SmsPatternsScreen> {
       setState(() {
         _error = null;
         _result = e == null
-            ? 'ไม่ตรงกับรูปแบบใด'
+            ? 'แอพยังอ่านข้อความนี้ไม่ได้ ส่งตัวอย่าง SMS ให้ผู้พัฒนาเพิ่มรูปแบบให้ หรือเพิ่มเองในส่วนขั้นสูงด้านล่าง'
             : [
-                'รูปแบบ: ${e.patternId}',
+                'อ่านได้ ✓',
                 'ประเภท: ${e.kind.label}',
                 'ธนาคาร: ${e.bankName ?? '-'}',
                 'ยอด: ${fmtMoney(e.amount)}',
@@ -107,75 +107,83 @@ class _SmsPatternsScreenState extends ConsumerState<SmsPatternsScreen> {
               ].join('\n');
       });
     } catch (e) {
-      setState(() => _error = 'JSON/regex ไม่ถูกต้อง: $e');
+      setState(() => _error = _invalid(e));
     }
   }
+
+  String _invalid(Object e) => 'รูปแบบที่เขียนไว้ใช้ไม่ได้ ตรวจวงเล็บและเครื่องหมายคำพูดอีกครั้ง ($e)';
 
   @override
   Widget build(BuildContext context) {
     final config = ref.watch(smsConfigProvider).value;
     final t = Theme.of(context).textTheme;
     return Scaffold(
-      appBar: AppBar(title: const Text('รูปแบบ SMS ธนาคาร')),
+      appBar: AppBar(title: const Text('ทดสอบการอ่าน SMS ธนาคาร')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           Text(
-            'แอพมีรูปแบบทั่วไปที่จับคำว่า "ยอดเรียกเก็บ / ขั้นต่ำ / ได้รับชำระ / ใช้จ่าย" ได้แล้ว '
-            'ถ้า SMS ธนาคารของคุณอ่านไม่ออก เพิ่มรูปแบบเฉพาะได้ด้านล่าง (เก็บในเครื่องเท่านั้น)',
+            'แอพอ่านคำว่า "ยอดเรียกเก็บ / ขั้นต่ำ / ได้รับชำระ / ใช้จ่าย" ใน SMS ธนาคารได้อยู่แล้ว '
+            'วาง SMS จริงจากธนาคารของคุณด้านล่างเพื่อลองว่าแอพอ่านยอดได้ถูกไหม',
             style: t.bodyMedium,
           ),
-          const SectionHeader('ผู้ส่งที่รู้จัก'),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _sample,
+            minLines: 2,
+            maxLines: 6,
+            decoration: const InputDecoration(labelText: 'ข้อความ SMS'),
+          ),
+          const SizedBox(height: 8),
+          TextField(controller: _sender, decoration: const InputDecoration(labelText: 'ชื่อผู้ส่ง เช่น KTC (เว้นว่างได้)')),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton(onPressed: _test, child: const Text('ลองอ่านยอด')),
+          ),
+          if (_result != null)
+            Card(margin: const EdgeInsets.only(top: 8), child: Padding(padding: const EdgeInsets.all(12), child: Text(_result!))),
+          if (_error != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
+          const SectionHeader('ธนาคารที่แอพรู้จัก'),
           if (config != null)
             for (final b in config.banks)
               ListTile(
                 dense: true,
                 title: Text(b.name),
-                subtitle: Text('ผู้ส่ง: ${b.senderIds.join(', ')}'),
+                subtitle: Text('ชื่อผู้ส่ง SMS: ${b.senderIds.join(', ')}'),
               ),
-          const SectionHeader('รูปแบบเพิ่มเติม (JSON)'),
-          Text(
-            'มาโคร: {AMOUNT} ตัวเลข, {MONEY} ตัวเลขที่มีคอมมาหรือทศนิยม, {DATE} วันที่, {CARD} เลข 4 หลัก · '
-            'kind: statement / payment / spending · ใช้ id ซ้ำกับของเดิมเพื่อแทนที่',
-            style: t.bodySmall,
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _json,
-            minLines: 6,
-            maxLines: 18,
-            style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-            decoration: const InputDecoration(hintText: 'ว่าง = ใช้รูปแบบมาตรฐาน'),
-          ),
-          if (_error != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
-          const SizedBox(height: 8),
-          OverflowBar(
-            alignment: MainAxisAlignment.spaceBetween,
-            overflowAlignment: OverflowBarAlignment.end,
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: const Text('ขั้นสูง: เพิ่มรูปแบบ SMS เอง'),
+            subtitle: const Text('ต้องเขียนเป็นโค้ด สำหรับคนที่ถนัดเท่านั้น'),
             children: [
-              TextButton(
-                onPressed: () => setState(() => _json.text = _template),
-                child: const Text('ใส่ตัวอย่าง'),
+              Text(
+                'เขียนแบบ JSON และ regex · {AMOUNT} ตัวเลข, {MONEY} ตัวเลขที่มีคอมมาหรือทศนิยม, {DATE} วันที่, {CARD} เลข 4 หลัก · '
+                'kind: statement / payment / spending · ใช้ id ซ้ำกับของเดิมเพื่อแทนที่ · เก็บในเครื่องนี้เท่านั้น',
+                style: t.bodySmall,
               ),
-              FilledButton(onPressed: _save, child: const Text('บันทึกรูปแบบ')),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _json,
+                minLines: 6,
+                maxLines: 18,
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                decoration: const InputDecoration(hintText: 'ว่าง = ใช้รูปแบบที่มากับแอพ'),
+              ),
+              const SizedBox(height: 8),
+              OverflowBar(
+                alignment: MainAxisAlignment.spaceBetween,
+                overflowAlignment: OverflowBarAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => setState(() => _json.text = _template),
+                    child: const Text('ใส่ตัวอย่าง'),
+                  ),
+                  FilledButton(onPressed: _save, child: const Text('บันทึกรูปแบบ')),
+                ],
+              ),
             ],
           ),
-          const SectionHeader('ทดสอบ'),
-          TextField(controller: _sender, decoration: const InputDecoration(labelText: 'ผู้ส่ง (เว้นว่างได้)')),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _sample,
-            minLines: 2,
-            maxLines: 6,
-            decoration: const InputDecoration(labelText: 'ข้อความ SMS ตัวอย่าง'),
-          ),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerRight,
-            child: OutlinedButton(onPressed: _test, child: const Text('ทดสอบอ่านยอด')),
-          ),
-          if (_result != null)
-            Card(margin: const EdgeInsets.only(top: 8), child: Padding(padding: const EdgeInsets.all(12), child: Text(_result!))),
         ],
       ),
     );

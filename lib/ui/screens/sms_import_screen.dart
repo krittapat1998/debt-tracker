@@ -68,7 +68,7 @@ class _SmsImportScreenState extends ConsumerState<SmsImportScreen> with WidgetsB
       context,
       title: 'อนุญาตให้อ่าน SMS?',
       message: 'แอพจะอ่านเฉพาะเพื่อหา SMS แจ้งยอดบัตร/การชำระจากธนาคาร '
-          'ข้อความถูกพาร์สในเครื่องนี้เท่านั้น ไม่มีการส่ง SMS ออกจากเครื่องไปที่ใด '
+          'แอพอ่านข้อความในเครื่องนี้เท่านั้น ไม่ส่ง SMS ออกจากเครื่องไปที่ไหน '
           'และทุกรายการต้องให้คุณยืนยันก่อนบันทึก',
       confirmLabel: 'ดำเนินการต่อ',
     );
@@ -235,7 +235,7 @@ class _SmsImportScreenState extends ConsumerState<SmsImportScreen> with WidgetsB
             Text('อ่าน SMS ธนาคารอัตโนมัติ (Android)', style: t.titleSmall),
             const SizedBox(height: 4),
             Text(
-              'ข้อความถูกพาร์สในเครื่องเท่านั้น ไม่ส่งออกไปที่ใด และไม่มีการบันทึกจนกว่าคุณจะยืนยัน',
+              'แอพอ่านข้อความในเครื่องนี้เท่านั้น ไม่ส่งไปที่ไหน และไม่บันทึกอะไรจนกว่าคุณจะยืนยัน',
               style: t.bodySmall,
             ),
             const SizedBox(height: 10),

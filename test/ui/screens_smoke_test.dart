@@ -693,6 +693,21 @@ void main() {
     await pump(tester, const SmsPatternsScreen());
   });
 
+  testWidgets('settings speak plainly, and the SMS tester reads a bank message', (tester) async {
+    await pump(tester, const SettingsScreen());
+    for (final jargon in ['regex', 'JSON', 'AES', 'CSV', 'server', 'cloud', 'พาร์ส']) {
+      expect(find.textContaining(jargon), findsNothing, reason: jargon);
+    }
+    await pump(tester, const SmsPatternsScreen());
+    await tester.enterText(find.widgetWithText(TextField, 'ข้อความ SMS'),
+        'KTC: ยอดเรียกเก็บบัตร x1234 รอบ 10/10/69 จำนวน 15,230.50 บ. ขั้นต่ำ 1,523.05 บ. ครบกำหนดชำระ 25/10/69');
+    await tester.tap(find.text('ลองอ่านยอด'));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await settle(tester);
+    expect(find.textContaining('อ่านได้ ✓'), findsOneWidget);
+    expect(find.textContaining('฿15,230.50'), findsOneWidget);
+  });
+
   testWidgets('SMS import: pasted message → pending card → review sheet', (tester) async {
     final container = await pump(tester, const SmsImportScreen());
     await tester.runAsync(() => container.read(pendingImportsProvider.notifier).addPasted(
