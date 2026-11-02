@@ -584,8 +584,10 @@ void main() {
     await tester.scrollUntilVisible(find.text('ดอกเบี้ยโปรโมชั่นเปลี่ยนตามงวด'), 200, scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('ดอกเบี้ยโปรโมชั่นเปลี่ยนตามงวด'));
     await settle(tester);
-    // Typed as on the bank's paper: "4-6".
-    await tester.enterText(find.widgetWithText(TextFormField, 'งวดที่'), '4-6');
+    // The first period starts from the rate typed above; complete it as on
+    // the bank's paper, then the second period.
+    await tester.enterText(find.widgetWithText(TextFormField, 'งวดที่').first, '1-3');
+    await tester.enterText(find.widgetWithText(TextFormField, 'งวดที่').last, '4-6');
     await tester.enterText(find.widgetWithText(TextFormField, 'ดอกเบี้ยต่อปี').last, '24');
     await settle(tester);
     expect(find.text('งวด 1–3 21.99% · งวด 4–6 24%'), findsOneWidget);
@@ -607,20 +609,37 @@ void main() {
     await tester.scrollUntilVisible(find.text('ดอกเบี้ยโปรโมชั่นเปลี่ยนตามงวด'), 200, scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('ดอกเบี้ยโปรโมชั่นเปลี่ยนตามงวด'));
     await settle(tester);
-    await tester.enterText(find.widgetWithText(TextFormField, 'งวดที่'), '01-03');
-    await tester.enterText(find.widgetWithText(TextFormField, 'ดอกเบี้ยต่อปี').last, '21.99');
-    await tester.tap(find.text('เพิ่มช่วงดอกเบี้ย'));
-    await settle(tester);
-    await tester.enterText(find.widgetWithText(TextFormField, 'งวดที่').last, '04-06');
-    await tester.enterText(find.widgetWithText(TextFormField, 'ดอกเบี้ยต่อปี').last, '24');
+    final periods = find.widgetWithText(TextFormField, 'งวดที่');
+    final rates = find.widgetWithText(TextFormField, 'ดอกเบี้ยต่อปี');
+    final n = tester.widgetList(rates).length; // the last two are the rows' rates
+    await tester.enterText(periods.at(0), '01-03');
+    await tester.enterText(rates.at(n - 2), '21.99');
+    await tester.enterText(periods.at(1), '04-06');
+    await tester.enterText(rates.at(n - 1), '24');
     await settle(tester);
     expect(find.text('งวด 1–3 21.99% · งวด 4–6 24%'), findsOneWidget);
+    // The rate above is locked while the periods set the rates.
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, 2000));
+    await settle(tester);
+    expect(tester.widget<TextField>(find.descendant(of: rates.first, matching: find.byType(TextField))).enabled, isFalse);
     await tester.scrollUntilVisible(find.text('บันทึก'), 500, scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('บันทึก'));
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
     await settle(tester);
     final saved = ledger.savedPlans.single;
     expect((saved.annualRate, saved.rateSteps.single.fromInstallment, saved.rateSteps.single.annualRate), (21.99, 4, 24.0));
+  });
+
+  testWidgets('plan form: editing a promo plan shows every period as a row', (tester) async {
+    final plan = InstallmentPlan(id: 'ttb', accountId: 'a2', name: 'cash chill chill', principal: 10000, annualRate: 21.99,
+        interestMethod: InterestMethod.reducing, termMonths: 6, monthlyPaymentOverride: 1785,
+        startDate: DateTime(2026, 8, 20), rateSteps: const [RateStep(fromInstallment: 4, annualRate: 24)],
+        createdAt: DateTime(2026, 7, 15));
+    await pump(tester, PlanFormScreen(account: portfolio.byId('a2')!, existing: plan));
+    await tester.scrollUntilVisible(find.text('งวด 1–3 21.99% · งวด 4–6 24%'), 200, scrollable: find.byType(Scrollable).first);
+    expect(find.widgetWithText(TextFormField, '1-3'), findsOneWidget);
+    expect(find.widgetWithText(TextFormField, '4-6'), findsOneWidget);
+    expect(find.widgetWithText(TextFormField, '24.0'), findsOneWidget);
   });
 
   testWidgets('plan form: principal from the installment, and a check of what counts as paid', (tester) async {
