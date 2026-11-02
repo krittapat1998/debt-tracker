@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/services/settings_service.dart';
 import '../domain/finance/portfolio.dart';
 import 'providers.dart';
 import 'screens/calculator_screen.dart';
@@ -10,16 +11,22 @@ import 'screens/history_screen.dart';
 import 'screens/settings_screen.dart';
 import 'theme.dart';
 
-class DebtTrackerApp extends StatelessWidget {
+class DebtTrackerApp extends ConsumerWidget {
   const DebtTrackerApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final choice = ref.watch(themeChoiceProvider);
     return MaterialApp(
       title: 'Debt Tracker',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light(),
+      theme: choice == ThemeChoice.blue ? AppTheme.blue() : AppTheme.light(),
       darkTheme: AppTheme.dark(),
+      themeMode: switch (choice) {
+        ThemeChoice.system => ThemeMode.system,
+        ThemeChoice.light || ThemeChoice.blue => ThemeMode.light,
+        ThemeChoice.dark => ThemeMode.dark,
+      },
       locale: const Locale('th'),
       supportedLocales: const [Locale('th'), Locale('en')],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,

@@ -5,6 +5,7 @@ import 'package:debt_tracker/data/backup/backup_service.dart';
 import 'package:debt_tracker/data/db/app_database.dart';
 import 'package:debt_tracker/data/repositories/sqlite_repositories.dart';
 import 'package:debt_tracker/data/services/ledger_service.dart';
+import 'package:debt_tracker/data/services/settings_service.dart';
 import 'package:debt_tracker/domain/models/account.dart';
 import 'package:debt_tracker/domain/models/credit_line.dart';
 import 'package:debt_tracker/domain/models/enums.dart';
@@ -316,6 +317,26 @@ void main() {
     });
   });
 
+  test('the card color is saved with the account and survives a backup', () async {
+    final colored = Account(id: 'a', name: 'KTC', type: AccountType.creditCard, color: 0xFF6A1B9A, createdAt: DateTime(2026));
+    await ledger.saveAccount(colored, [cardLine()]);
+    expect((await SqliteAccountRepository(db).getById('a'))!.color, 0xFF6A1B9A);
+
+    final backup = BackupService(db);
+    final json = await backup.exportJson();
+    await ledger.deleteAccount('a');
+    await backup.importJson(json);
+    expect((await SqliteAccountRepository(db).getById('a'))!.color, 0xFF6A1B9A);
+  });
+
+  test('the theme choice is remembered, and anything unknown falls back to the system', () async {
+    final settings = SettingsService(SqliteSettingsRepository(db));
+    expect(await settings.themeChoice(), ThemeChoice.system);
+    await settings.setThemeChoice(ThemeChoice.blue);
+    expect(await settings.themeChoice(), ThemeChoice.blue);
+    expect(ThemeChoice.fromName('purple'), ThemeChoice.system);
+  });
+
   test('deleting the account deletes its spending', () async {
     await ledger.recordSpending(spending(1200));
     await ledger.deleteAccount('a');
@@ -508,8 +529,10 @@ void main() {
 
     final upgraded = await AppDatabase.open(factory: databaseFactoryFfi, path: path);
     addTearDown(upgraded.close);
-    expect(await upgraded.db.getVersion(), 5);
-    expect(await upgraded.db.query('accounts'), hasLength(1));
+    expect(await upgraded.db.getVersion(), 6);
+    expect(await upgraded.db.query('accounts'), [
+      {'id': 'old', 'name': 'KTC', 'color': null},
+    ]);
     expect(await upgraded.db.query('spendings'), isEmpty);
     expect(await upgraded.db.query('recurring_charges'), isEmpty);
   });
@@ -522,6 +545,7 @@ void main() {
         options: OpenDatabaseOptions(
           version: 2,
           onCreate: (db, _) async {
+            await db.execute('CREATE TABLE accounts (id TEXT PRIMARY KEY, name TEXT NOT NULL)');
             await db.execute('CREATE TABLE credit_lines (id TEXT PRIMARY KEY, account_id TEXT, name TEXT, '
                 'credit_limit REAL, balance REAL, annual_rate REAL, interest_method TEXT, sort_order INTEGER)');
             await db.execute('CREATE TABLE spendings (id TEXT PRIMARY KEY, account_id TEXT, credit_line_id TEXT, '
@@ -537,7 +561,7 @@ void main() {
 
     final upgraded = await AppDatabase.open(factory: databaseFactoryFfi, path: path);
     addTearDown(upgraded.close);
-    expect(await upgraded.db.getVersion(), 5);
+    expect(await upgraded.db.getVersion(), 6);
     expect((await SqliteSpendingRepository(upgraded).getAll()).single.lineBalanceApplied, 1200);
     expect((await SqliteCreditLineRepository(upgraded).getAll()).single.balanceAsOf, isNull);
   });

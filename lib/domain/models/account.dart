@@ -20,6 +20,7 @@ class Account {
     this.sharedLimit,
     this.reminderDaysBefore = 3,
     this.note,
+    this.color,
     required this.createdAt,
   });
 
@@ -53,6 +54,9 @@ class Account {
   final double? sharedLimit;
   final int reminderDaysBefore;
   final String? note;
+
+  /// Card color (ARGB) picked by the user; null = the theme's card color.
+  final int? color;
   final DateTime createdAt;
 
   Account withBillingDay(int day) => Account(
@@ -70,6 +74,7 @@ class Account {
         sharedLimit: sharedLimit,
         reminderDaysBefore: reminderDaysBefore,
         note: note,
+        color: color,
         createdAt: createdAt,
       );
 
@@ -94,6 +99,7 @@ class Account {
       sharedLimit: sharedLimit,
       reminderDaysBefore: reminderDaysBefore,
       note: note,
+      color: color,
       createdAt: createdAt,
     );
   }
@@ -114,6 +120,7 @@ class Account {
         'shared_limit': sharedLimit,
         'reminder_days_before': reminderDaysBefore,
         'note': note,
+        'color': color,
         'created_at': createdAt.toIso8601String(),
       };
 
@@ -132,6 +139,7 @@ class Account {
         sharedLimit: (m['shared_limit'] as num?)?.toDouble(),
         reminderDaysBefore: (m['reminder_days_before'] as num?)?.toInt() ?? 3,
         note: m['note'] as String?,
+        color: (m['color'] as num?)?.toInt(),
         createdAt: DateTime.parse(m['created_at'] as String),
       );
 }

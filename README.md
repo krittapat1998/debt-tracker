@@ -30,6 +30,7 @@ flutter test           # unit test สูตรคำนวณ, SMS parser, ฐ�
 | Export JSON (เข้ารหัส AES-256-GCM ได้) / CSV, กู้คืน | `lib/data/backup/backup_service.dart` |
 | ดึงยอดจาก SMS (Android อ่านอัตโนมัติ, iOS วางข้อความ) | `lib/data/sources/sms/`, `android/.../Sms*.kt` |
 | Home screen widget | `android/.../DebtWidgetProvider.kt`, `ios/DebtWidget/DebtWidget.swift` |
+| ธีม (ตามระบบ / สว่าง / มืด / น้ำเงิน) เลือกในหน้าตั้งค่า, สีบัตรเลือกได้ต่อใบ (ตัวอักษรบนบัตรปรับให้อ่านง่ายเอง) | `lib/ui/theme.dart`, `lib/ui/widgets/card_colors.dart`, `settings_screen.dart` |
 
 ## โครงสร้าง
 
@@ -102,6 +103,7 @@ assets/sms_patterns.json  regex ของแต่ละธนาคาร (แ�
 - `assets/icon/app_icon.png`: สี่เหลี่ยมเต็มกรอบ 1024px ไม่มีมุมโค้งและไม่มีพื้นโปร่งใส (iOS/Android ตัดมุมเอง)
 - Android ใช้ adaptive icon: `assets/icon/adaptive_background.png` ย่อภาพให้อยู่ในวงกลมปลอดภัยของ launcher
 - แก้รูปแล้วสร้างไอคอนทุกขนาดใหม่ด้วย `dart run flutter_launcher_icons`
+- หน้าจอเปิดแอพ iOS (`ios/Runner/Base.lproj/LaunchScreen.storyboard`) ใช้ `LaunchImage` = ไอคอนมุมโค้ง 120pt บนพื้นตามโหมดเครื่อง และค้างไว้อีก 1 วินาทีใน `lib/main.dart`
 
 ## ความเป็นส่วนตัว / สำรองข้อมูล
 

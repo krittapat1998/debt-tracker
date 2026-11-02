@@ -10,7 +10,7 @@ class AppDatabase {
   /// 2: spendings table. 3: credit_lines.balance_as_of and
   /// spendings.line_balance_applied (backdated entries vs typed-in balances).
   /// 4: recurring_charges table.
-  static const _version = 5;
+  static const _version = 6;
   static const fileName = 'debt_tracker.db';
 
   /// Parents before children (backup restore inserts in this order).
@@ -40,6 +40,7 @@ class AppDatabase {
             batch.execute('ALTER TABLE installment_plans ADD COLUMN anchor_day INTEGER');
             batch.execute('ALTER TABLE installment_plans ADD COLUMN posted_through INTEGER');
           }
+          if (oldVersion < 6) batch.execute('ALTER TABLE accounts ADD COLUMN color INTEGER');
           await batch.commit(noResult: true);
         },
       ),
@@ -65,6 +66,7 @@ class AppDatabase {
         shared_limit REAL,
         reminder_days_before INTEGER NOT NULL DEFAULT 3,
         note TEXT,
+        color INTEGER,
         created_at TEXT NOT NULL
       )''');
     batch.execute('''

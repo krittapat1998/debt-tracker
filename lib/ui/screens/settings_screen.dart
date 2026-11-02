@@ -22,6 +22,7 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final prefs = ref.watch(notificationPrefsProvider).value ?? const NotificationPrefs();
     final settings = ref.read(settingsServiceProvider);
+    final theme = ref.watch(themeChoiceProvider);
 
     Future<void> savePrefs(NotificationPrefs p) async {
       await settings.saveNotificationPrefs(p);
@@ -33,6 +34,28 @@ class SettingsScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.only(bottom: 32),
         children: [
+          const SectionHeader('ธีม'),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                for (final c in ThemeChoice.values)
+                  ChoiceChip(
+                    avatar: _ThemeSwatch(c),
+                    label: Text(c.label),
+                    selected: theme == c,
+                    showCheckmark: false,
+                    onSelected: (_) => ref.read(themeChoiceProvider.notifier).set(c),
+                  ),
+              ],
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 4, 16, 0),
+            child: Text('ตามระบบ = สว่างหรือมืดตามการตั้งค่าของเครื่อง'),
+          ),
           const SectionHeader('การแจ้งเตือน'),
           SwitchListTile(
             title: const Text('เตือนวันครบกำหนดชำระ'),
@@ -238,5 +261,22 @@ class SettingsScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+}
+
+/// Small preview dot of a theme's background.
+class _ThemeSwatch extends StatelessWidget {
+  const _ThemeSwatch(this.choice);
+  final ThemeChoice choice;
+
+  @override
+  Widget build(BuildContext context) {
+    final border = Border.all(color: Theme.of(context).colorScheme.outline);
+    return switch (choice) {
+      ThemeChoice.system => const Icon(Icons.brightness_auto, size: 18),
+      ThemeChoice.light => Container(decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, border: border)),
+      ThemeChoice.dark => Container(decoration: BoxDecoration(color: const Color(0xFF111418), shape: BoxShape.circle, border: border)),
+      ThemeChoice.blue => Container(decoration: BoxDecoration(color: const Color(0xFF1150C8), shape: BoxShape.circle, border: border)),
+    };
   }
 }

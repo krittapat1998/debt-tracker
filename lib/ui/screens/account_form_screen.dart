@@ -9,6 +9,7 @@ import '../../domain/models/account.dart';
 import '../../domain/models/credit_line.dart';
 import '../../domain/models/enums.dart';
 import '../providers.dart';
+import '../widgets/card_colors.dart';
 import '../widgets/common.dart';
 import '../widgets/form_fields.dart';
 import 'plan_form_screen.dart';
@@ -85,6 +86,7 @@ class _AccountFormScreenState extends ConsumerState<AccountFormScreen> {
   late int? _dueDay = _orig?.dueDay;
   late int _reminderDays = _orig?.reminderDaysBefore ?? 3;
   late DateTime? _statementDate = _orig?.statementDate;
+  late int? _color = _orig?.color;
   late final List<_LineDraft> _lines;
   bool _saving = false;
 
@@ -145,6 +147,7 @@ class _AccountFormScreenState extends ConsumerState<AccountFormScreen> {
       sharedLimit: parseAmount(_sharedLimit.text),
       reminderDaysBefore: _reminderDays,
       note: _note.text.trim().isEmpty ? null : _note.text.trim(),
+      color: _color,
       createdAt: _orig?.createdAt ?? DateTime.now(),
     );
     final lines = [
@@ -233,6 +236,10 @@ class _AccountFormScreenState extends ConsumerState<AccountFormScreen> {
               decoration: const InputDecoration(labelText: 'เลขท้ายบัตร 4 หลัก (ถ้ามี)', counterText: ''),
               validator: (v) => (v != null && v.isNotEmpty && v.length != 4) ? 'ต้องเป็นตัวเลข 4 หลัก' : null,
             ),
+            formGap,
+            Text('สีบัตร', style: t.labelLarge),
+            const SizedBox(height: 8),
+            CardColorPicker(value: _color, onChanged: (v) => setState(() => _color = v)),
             formGap,
             Row(
               children: [
