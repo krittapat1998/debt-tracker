@@ -16,13 +16,16 @@ Future<void> main() async {
   binding.deferFirstFrame();
   await initializeDateFormatting('th');
   final db = await AppDatabase.open();
-  final theme = await SettingsService(SqliteSettingsRepository(db)).themeChoice();
+  final settings = SettingsService(SqliteSettingsRepository(db));
+  final theme = await settings.themeChoice();
+  final appLock = await settings.appLockEnabled();
   await NotificationService.instance.init();
   await HomeWidgetService().init();
   runApp(ProviderScope(
     overrides: [
       databaseProvider.overrideWithValue(db),
       initialThemeChoiceProvider.overrideWithValue(theme),
+      initialAppLockProvider.overrideWithValue(appLock),
     ],
     child: const DebtTrackerApp(),
   ));

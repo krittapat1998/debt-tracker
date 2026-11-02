@@ -44,6 +44,7 @@ class SettingsService {
   static const _smsCustomPatterns = 'sms_custom_patterns';
   static const _smsSeenKeys = 'sms_seen_keys';
   static const _theme = 'theme';
+  static const _appLock = 'app_lock';
 
   Future<NotificationPrefs> notificationPrefs() async => NotificationPrefs(
         enabled: (await _repo.get(_notifEnabled)) != '0',
@@ -65,6 +66,11 @@ class SettingsService {
   Future<ThemeChoice> themeChoice() async => ThemeChoice.fromName(await _repo.get(_theme));
 
   Future<void> setThemeChoice(ThemeChoice c) => _repo.set(_theme, c.name);
+
+  /// Face ID (or the passcode) is needed to open the app.
+  Future<bool> appLockEnabled() async => (await _repo.get(_appLock)) == '1';
+
+  Future<void> setAppLockEnabled(bool v) => _repo.set(_appLock, v ? '1' : '0');
 
   Future<DateTime?> lastSmsScan() async =>
       DateTime.tryParse(await _repo.get(_smsLastScan) ?? '');

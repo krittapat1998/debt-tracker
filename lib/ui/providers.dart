@@ -15,6 +15,7 @@ import '../data/sources/sms/sms_parser_service.dart';
 import '../data/sources/statement_import_service.dart';
 import '../data/sources/statement_source_parser.dart';
 import '../domain/finance/portfolio.dart';
+import '../platform/app_lock_service.dart';
 import '../platform/home_widget_service.dart';
 import '../platform/notification_service.dart';
 import '../platform/sms_gateway.dart';
@@ -53,6 +54,7 @@ final backupServiceProvider = Provider<BackupService>((ref) => BackupService(ref
 final notificationServiceProvider = Provider<NotificationService>((ref) => NotificationService.instance);
 final homeWidgetServiceProvider = Provider<HomeWidgetService>((ref) => HomeWidgetService());
 final smsGatewayProvider = Provider<SmsGateway>((ref) => SmsGateway());
+final appLockServiceProvider = Provider<AppLockService>((ref) => AppLockService());
 
 /// Everything the screens read, recomputed after each write via
 /// `ref.invalidate(portfolioProvider)`.
@@ -95,6 +97,22 @@ class ThemeChoiceNotifier extends Notifier<ThemeChoice> {
 }
 
 final themeChoiceProvider = NotifierProvider<ThemeChoiceNotifier, ThemeChoice>(ThemeChoiceNotifier.new);
+
+/// Overridden in main() with the saved setting, so a locked app never
+/// shows its data before the lock screen.
+final initialAppLockProvider = Provider<bool>((ref) => false);
+
+class AppLockNotifier extends Notifier<bool> {
+  @override
+  bool build() => ref.read(initialAppLockProvider);
+
+  Future<void> set(bool on) async {
+    state = on;
+    await ref.read(settingsServiceProvider).setAppLockEnabled(on);
+  }
+}
+
+final appLockProvider = NotifierProvider<AppLockNotifier, bool>(AppLockNotifier.new);
 
 final notificationPrefsProvider =
     FutureProvider<NotificationPrefs>((ref) => ref.watch(settingsServiceProvider).notificationPrefs());

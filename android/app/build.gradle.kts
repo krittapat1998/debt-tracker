@@ -46,4 +46,6 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    // local_auth's biometric prompt needs an AppCompat LaunchTheme.
+    implementation("androidx.appcompat:appcompat:1.7.0")
 }
