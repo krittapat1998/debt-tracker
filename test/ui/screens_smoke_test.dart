@@ -62,8 +62,18 @@ class _RecordingLedger implements LedgerService {
   }
   @override
   Future<void> saveAccount(Account account, List<CreditLine> creditLines) async => savedAccounts.add(account);
+  final recurringIncluded = <bool?>[];
   @override
-  Future<void> saveRecurring(RecurringCharge c) async => charges.add(c);
+  Future<RecurringCharge> saveRecurring(RecurringCharge c, {bool? alreadyInBalance}) async {
+    charges.add(c);
+    recurringIncluded.add(alreadyInBalance);
+    // Like the ledger: rounds up to today are recorded and the charge moves on.
+    var saved = c;
+    while (!saved.nextDate.isAfter(dateOnly(DateTime.now()))) {
+      saved = saved.copyWith(nextDate: saved.following(saved.nextDate));
+    }
+    return saved;
+  }
   @override
   Future<void> savePlan(InstallmentPlan p) async => savedPlans.add(p);
   @override
@@ -415,17 +425,21 @@ void main() {
     await settle(tester);
     expect(ledger.charges, isEmpty);
 
-    await tester.tap(find.text('หักครั้งถัดไป'));
+    await tester.tap(find.text('วันที่หัก'));
     await settle(tester);
     await tester.tap(find.text('ตกลง'));
     await settle(tester);
-    expect(find.textContaining('หักทุกเดือน วันที่ ${today.day}'), findsOneWidget);
+    // Today: the charge the card just took is recorded right away, and the
+    // dialog asks whether the balance already has it.
+    expect(find.textContaining('หักทุกเดือน วันที่ ${today.day} · บันทึกยอดของ ${fmtDate(today)}ให้เลย'), findsOneWidget);
+    expect(find.textContaining('รวมรายการนี้แล้ว'), findsOneWidget);
     await tester.tap(find.text('บันทึก'));
     await settle(tester);
     final c = ledger.charges.single;
     expect((c.accountId, c.creditLineId, c.name, c.amount, c.nextDate, c.anchorDay, c.active),
         ('a1', 'l1', 'Spotify', 149.0, today, today.day, true));
-    expect(find.text('เพิ่ม Spotify แล้ว · บันทึกยอดของวันนี้แล้ว · ครั้งถัดไป ${fmtDate(c.following(today))}'),
+    expect(ledger.recurringIncluded.single, isFalse);
+    expect(find.text('เพิ่ม Spotify แล้ว · บันทึกยอด ${fmtDate(today)}แล้ว · ครั้งถัดไป ${fmtDate(c.following(today))}'),
         findsOneWidget);
   });
 

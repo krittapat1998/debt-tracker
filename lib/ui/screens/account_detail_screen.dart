@@ -723,6 +723,17 @@ Future<void> _recurringDialog(BuildContext context, WidgetRef ref, AccountSummar
   // A paused charge can sit in the past; the picker starts at today.
   DateTime? next = existing == null ? null : (existing.nextDate.isBefore(today) ? today : existing.nextDate);
   var dateMissing = false;
+  // For a charge the card already took: whether the typed-in balance has
+  // it. Null = guess from the dates.
+  bool? included;
+  /// Rounds from [next] up to today, recorded as soon as it is saved.
+  List<DateTime> dueRounds() {
+    final d = next;
+    if (d == null) return const [];
+    final probe = RecurringCharge(
+        id: '', accountId: '', name: '', amount: 0, interval: interval, nextDate: d, anchorDay: d.day, createdAt: today);
+    return [for (var x = d; !x.isAfter(today); x = probe.following(x)) x];
+  }
   final saved = await showDialog<bool>(
     context: context,
     builder: (ctx) => StatefulBuilder(
@@ -764,25 +775,46 @@ Future<void> _recurringDialog(BuildContext context, WidgetRef ref, AccountSummar
                 const SizedBox(height: 12),
                 DateField(
                   value: next,
-                  label: 'หักครั้งถัดไป',
-                  firstDate: today,
+                  label: 'วันที่หัก',
+                  // A charge the card just took can start from that day.
+                  firstDate: addMonths(today, -12),
                   onChanged: (d) => setState(() {
                     next = d ?? next;
                     dateMissing = false;
+                    included = null;
                   }),
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  next == null
-                      ? 'เลือกวันที่บัตรจะถูกหักครั้งถัดไป'
+                Builder(builder: (_) {
+                  final rounds = dueRounds();
+                  final schedule = next == null
+                      ? ''
                       : 'หัก${_schedule(interval, next!.day, next!.month)}'
-                          '${interval == RecurrenceInterval.monthly && next!.day > 28 ? ' (เดือนที่ไม่มีวันนี้ หักวันสุดท้ายของเดือน)' : ''}'
-                          ' · แอพจะบันทึกเป็นยอดใช้จ่ายให้เองตั้งแต่ ${fmtDate(next!)} รอบที่ผ่านมาแล้วไม่บันทึกย้อนหลัง',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: dateMissing ? Theme.of(ctx).colorScheme.error : null,
+                          '${interval == RecurrenceInterval.monthly && next!.day > 28 ? ' (เดือนที่ไม่มีวันนี้ หักวันสุดท้ายของเดือน)' : ''}';
+                  return Text(
+                    next == null
+                        ? 'เลือกวันที่บัตรหักครั้งล่าสุด (ที่เพิ่งหักไป) หรือครั้งถัดไป'
+                        : rounds.isEmpty
+                            ? '$schedule · แอพจะบันทึกเป็นยอดใช้จ่ายให้เองตั้งแต่ ${fmtDate(next!)}'
+                            : '$schedule · บันทึกยอด${rounds.length == 1 ? 'ของ ${fmtDate(rounds.single)}' : ' ${rounds.length} รอบ (${fmtDate(rounds.first)}–${fmtDate(rounds.last)})'}'
+                                'ให้เลย ครั้งถัดไป ${fmtDate(addMonths(rounds.last, interval.months, anchorDay: next!.day))}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: dateMissing ? Theme.of(ctx).colorScheme.error : null,
+                    ),
+                  );
+                }),
+                if (dueRounds().isNotEmpty)
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: included ?? line.alreadyCounts(next!),
+                    onChanged: (v) => setState(() => included = v),
+                    title: Text(line.balanceAsOf == null
+                        ? '${a.account.type.revolvingLabel}ที่กรอกไว้รวมรายการนี้แล้ว'
+                        : '${a.account.type.revolvingLabel}ที่แก้ไว้เมื่อ ${fmtDate(line.balanceAsOf!)} รวมรายการนี้แล้ว',
+                        style: const TextStyle(fontSize: 14)),
+                    subtitle: const Text('เปิดไว้ = เก็บเป็นประวัติ ไม่บวกยอดซ้ำ', style: TextStyle(fontSize: 12)),
                   ),
-                ),
               ],
             ),
           ),
@@ -803,6 +835,7 @@ Future<void> _recurringDialog(BuildContext context, WidgetRef ref, AccountSummar
   );
   if (saved != true) return;
   final date = next!;
+  final rounds = dueRounds();
   final name = nameCtl.text.trim();
   final charge = RecurringCharge(
     id: existing?.id ?? newId(),
@@ -817,13 +850,15 @@ Future<void> _recurringDialog(BuildContext context, WidgetRef ref, AccountSummar
     active: existing?.active ?? true,
     createdAt: existing?.createdAt ?? DateTime.now(),
   );
-  await ref.read(ledgerProvider).saveRecurring(charge);
-  // Recording a charge due today happens on this refresh.
+  final stored = await ref.read(ledgerProvider).saveRecurring(
+    charge,
+    alreadyInBalance: rounds.isEmpty ? null : (included ?? line.alreadyCounts(date)),
+  );
   ref.refreshData();
   if (context.mounted) {
-    final when = date.isAfter(today)
+    final when = rounds.isEmpty
         ? 'หักครั้งถัดไป ${fmtDate(date)}'
-        : 'บันทึกยอดของวันนี้แล้ว · ครั้งถัดไป ${fmtDate(charge.following(date))}';
+        : 'บันทึกยอด ${rounds.length == 1 ? fmtDate(rounds.single) : '${rounds.length} รอบ'}แล้ว · ครั้งถัดไป ${fmtDate(stored.nextDate)}';
     showSnack(context, '${existing == null ? 'เพิ่ม' : 'แก้ไข'} $name แล้ว · $when');
   }
 }
