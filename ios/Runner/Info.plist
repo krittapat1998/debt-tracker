@@ -6,6 +6,8 @@
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>ใช้ Face ID ปลดล็อกแอพ เพื่อไม่ให้คนอื่นเห็นยอดหนี้ของคุณ</string>
 	<key>CFBundleDisplayName</key>
 	<string>Debt Tracker</string>
 	<key>CFBundleExecutable</key>

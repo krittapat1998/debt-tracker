@@ -31,6 +31,7 @@ flutter test           # unit test สูตรคำนวณ, SMS parser, ฐ�
 | Export JSON (เข้ารหัส AES-256-GCM ได้) / CSV, กู้คืน | `lib/data/backup/backup_service.dart` |
 | ดึงยอดจาก SMS (Android อ่านอัตโนมัติ, iOS วางข้อความ) | `lib/data/sources/sms/`, `android/.../Sms*.kt` |
 | Home screen widget | `android/.../DebtWidgetProvider.kt`, `ios/DebtWidget/DebtWidget.swift` |
+| ล็อกแอพด้วย Face ID / สแกนนิ้ว (หรือรหัสเครื่อง): ตอนเปิดแอพ และเมื่อกลับมาหลังออกไปเกิน 1 นาที; เปิด/ปิดในหน้าตั้งค่า ต้องยืนยันตัวตนก่อน | `lib/ui/widgets/app_lock_gate.dart`, `lib/platform/app_lock_service.dart` (Android ใช้ `FlutterFragmentActivity` + AppCompat LaunchTheme) |
 | ธีม (ตามระบบ / สว่าง / มืด / น้ำเงิน) เลือกในหน้าตั้งค่า, สีบัตรเลือกได้ต่อใบ (ตัวอักษรบนบัตรปรับให้อ่านง่ายเอง) | `lib/ui/theme.dart`, `lib/ui/widgets/card_colors.dart`, `settings_screen.dart` |
 
 ## โครงสร้าง

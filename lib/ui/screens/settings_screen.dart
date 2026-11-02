@@ -136,6 +136,13 @@ class SettingsScreen extends ConsumerWidget {
             onTap: () => _restore(context, ref),
           ),
           const SectionHeader('ความเป็นส่วนตัว'),
+          SwitchListTile(
+            secondary: const Icon(Icons.lock_person_outlined),
+            title: Text('ล็อกแอพด้วย ${Platform.isIOS ? 'Face ID' : 'สแกนนิ้ว'}'),
+            subtitle: const Text('ตอนเปิดแอพ และเมื่อกลับมาหลังออกไปเกิน 1 นาที ต้องยืนยันตัวตนหรือใส่รหัสเครื่องก่อน'),
+            value: ref.watch(appLockProvider),
+            onChanged: (v) => _setAppLock(context, ref, v),
+          ),
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 20),
             child: Text(
@@ -147,6 +154,18 @@ class SettingsScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  /// Turning the lock on or off needs the owner's face (or passcode) too.
+  Future<void> _setAppLock(BuildContext context, WidgetRef ref, bool on) async {
+    final lock = ref.read(appLockServiceProvider);
+    if (on && !await lock.isAvailable()) {
+      if (context.mounted) showSnack(context, 'เครื่องนี้ยังไม่ได้ตั้ง Face ID หรือรหัสเครื่อง ตั้งได้ในการตั้งค่าของเครื่อง');
+      return;
+    }
+    if (!await lock.unlock(on ? 'ยืนยันเพื่อเปิดการล็อกแอพ' : 'ยืนยันเพื่อปิดการล็อกแอพ')) return;
+    await ref.read(appLockProvider.notifier).set(on);
+    if (context.mounted) showSnack(context, on ? 'เปิดการล็อกแอพแล้ว' : 'ปิดการล็อกแอพแล้ว');
   }
 
   Rect? _shareOrigin(BuildContext context) {
