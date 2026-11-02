@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
 import 'data/db/app_database.dart';
+import 'data/repositories/sqlite_repositories.dart';
+import 'data/services/settings_service.dart';
 import 'platform/home_widget_service.dart';
 import 'platform/notification_service.dart';
 import 'ui/app.dart';
@@ -14,10 +16,14 @@ Future<void> main() async {
   binding.deferFirstFrame();
   await initializeDateFormatting('th');
   final db = await AppDatabase.open();
+  final theme = await SettingsService(SqliteSettingsRepository(db)).themeChoice();
   await NotificationService.instance.init();
   await HomeWidgetService().init();
   runApp(ProviderScope(
-    overrides: [databaseProvider.overrideWithValue(db)],
+    overrides: [
+      databaseProvider.overrideWithValue(db),
+      initialThemeChoiceProvider.overrideWithValue(theme),
+    ],
     child: const DebtTrackerApp(),
   ));
   await Future<void>.delayed(const Duration(seconds: 1));

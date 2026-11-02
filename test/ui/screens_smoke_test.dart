@@ -27,6 +27,7 @@ import 'package:debt_tracker/ui/screens/settings_screen.dart';
 import 'package:debt_tracker/ui/screens/sms_import_screen.dart';
 import 'package:debt_tracker/ui/screens/sms_patterns_screen.dart';
 import 'package:debt_tracker/ui/theme.dart';
+import 'package:debt_tracker/ui/widgets/card_colors.dart';
 import 'package:debt_tracker/ui/widgets/common.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -49,6 +50,9 @@ class _RecordingLedger implements LedgerService {
   final charges = <RecurringCharge>[];
   final savedPlans = <InstallmentPlan>[];
   final billingDays = <(String, int)>[];
+  final savedAccounts = <Account>[];
+  @override
+  Future<void> saveAccount(Account account, List<CreditLine> creditLines) async => savedAccounts.add(account);
   @override
   Future<void> saveRecurring(RecurringCharge c) async => charges.add(c);
   @override
@@ -82,6 +86,7 @@ PortfolioSummary samplePortfolio({
   List<Spending> spendings = const [],
   List<RecurringCharge> recurring = const [],
   DateTime? ktcBalanceAsOf,
+  int? ktcColor,
 }) {
   final today = dateOnly(DateTime.now());
   final created = today.subtract(const Duration(days: 120));
@@ -89,7 +94,8 @@ PortfolioSummary samplePortfolio({
   return PortfolioSummary.build(
     accounts: [
       Account(id: 'a1', name: 'KTC Visa Platinum', type: AccountType.creditCard, issuer: 'ktc', cardLast4: '1234',
-          billingDay: 20, dueDay: 5, statementBalance: 15230.5, minimumPayment: 1523.05, statementDate: ago(10), createdAt: created),
+          billingDay: 20, dueDay: 5, statementBalance: 15230.5, minimumPayment: 1523.05, statementDate: ago(10), color: ktcColor,
+          createdAt: created),
       Account(id: 'a2', name: 'UOB Preferred Platinum', type: AccountType.creditCard, issuer: 'uob',
           billingDay: 10, dueDay: 28, statementBalance: 8400, minimumPayment: 840, statementDate: ago(20), createdAt: created),
       Account(id: 'a3', name: 'First Choice', type: AccountType.cashCard, dueDay: 15, createdAt: created),
@@ -133,7 +139,7 @@ void main() {
   setUp(() => portfolio = samplePortfolio());
 
   Future<ProviderContainer> pump(WidgetTester tester, Widget screen,
-      {PortfolioSummary? data, LedgerService? ledger}) async {
+      {PortfolioSummary? data, LedgerService? ledger, ThemeData? theme}) async {
     tester.view.physicalSize = const Size(390 * 3, 844 * 3);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
@@ -149,7 +155,7 @@ void main() {
     await tester.pumpWidget(UncontrolledProviderScope(
       container: container,
       child: MaterialApp(
-        theme: AppTheme.light(),
+        theme: theme ?? AppTheme.light(),
         locale: const Locale('th'),
         supportedLocales: const [Locale('th'), Locale('en')],
         localizationsDelegates: GlobalMaterialLocalizations.delegates,
@@ -509,6 +515,39 @@ void main() {
     expect(find.text('แก้ไข UOB Preferred Platinum'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('วงเงินสินเชื่อ'), 300, scrollable: find.byType(Scrollable).first);
     await settle(tester);
+  });
+
+  testWidgets('account form: the picked card color is saved', (tester) async {
+    final ledger = _RecordingLedger();
+    await pump(tester, AccountFormScreen(existing: portfolio.byId('a2')), ledger: ledger);
+    await tester.tap(find.byTooltip('ม่วง'));
+    await settle(tester);
+    await tester.scrollUntilVisible(find.text('บันทึกการแก้ไข'), 500, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('บันทึกการแก้ไข'));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await settle(tester);
+    expect(ledger.savedAccounts.single.color, 0xFF6A1B9A);
+  });
+
+  testWidgets('colored cards and the blue theme render', (tester) async {
+    final colored = samplePortfolio(ktcColor: 0xFFF9A825);
+    await pump(tester, const DashboardScreen(), data: colored, theme: AppTheme.blue());
+    await tester.drag(find.byType(ListView).first, const Offset(0, -1500));
+    await settle(tester);
+    final card = tester.widget<Card>(find.ancestor(of: find.text('KTC Visa Platinum'), matching: find.byType(Card)).first);
+    expect(card.color ?? Theme.of(tester.element(find.text('KTC Visa Platinum'))).cardTheme.color, const Color(0xFFF9A825));
+    // Yellow is light: its text goes dark.
+    expect(Theme.of(tester.element(find.text('KTC Visa Platinum'))).colorScheme.onSurface, const Color(0xFF1B1B1B));
+  });
+
+  testWidgets('settings: picking a theme applies and saves it', (tester) async {
+    final container = await pump(tester, const SettingsScreen());
+    await tester.tap(find.text('น้ำเงิน'));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await settle(tester);
+    expect(container.read(themeChoiceProvider), ThemeChoice.blue);
+    expect(await tester.runAsync(() => container.read(settingsServiceProvider).themeChoice()), ThemeChoice.blue);
+    expect(themeForCard(AppTheme.light(), const Color(0xFF212121)).colorScheme.onSurface, Colors.white);
   });
 
   testWidgets('plan form: new, edit flat plan', (tester) async {

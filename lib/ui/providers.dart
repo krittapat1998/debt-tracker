@@ -80,6 +80,22 @@ final portfolioProvider = FutureProvider<PortfolioSummary>((ref) async {
   );
 });
 
+/// Overridden in main() with the saved choice, so the first frame already
+/// has the right theme.
+final initialThemeChoiceProvider = Provider<ThemeChoice>((ref) => ThemeChoice.system);
+
+class ThemeChoiceNotifier extends Notifier<ThemeChoice> {
+  @override
+  ThemeChoice build() => ref.read(initialThemeChoiceProvider);
+
+  Future<void> set(ThemeChoice c) async {
+    state = c;
+    await ref.read(settingsServiceProvider).setThemeChoice(c);
+  }
+}
+
+final themeChoiceProvider = NotifierProvider<ThemeChoiceNotifier, ThemeChoice>(ThemeChoiceNotifier.new);
+
 final notificationPrefsProvider =
     FutureProvider<NotificationPrefs>((ref) => ref.watch(settingsServiceProvider).notificationPrefs());
 

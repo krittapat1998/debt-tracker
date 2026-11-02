@@ -15,6 +15,7 @@ import '../../domain/models/payment.dart';
 import '../../domain/models/spending.dart';
 import '../providers.dart';
 import '../theme.dart';
+import '../widgets/card_colors.dart';
 import '../widgets/common.dart';
 import '../widgets/form_fields.dart';
 import 'account_form_screen.dart';
@@ -74,7 +75,7 @@ class AccountDetailScreen extends ConsumerWidget {
             children: [
               _DueCard(a: a),
               _QuickActions(a: a),
-              _OverviewCard(a: a),
+              CardColorTheme(color: a.account.color, child: _OverviewCard(a: a)),
               SectionHeader(a.lines.length > 1 ? 'วงเงินย่อย (${a.lines.length})' : 'วงเงิน'),
               for (final l in a.lines) _LineTile(a: a, line: l),
               if (a.lines.isNotEmpty) _RecurringSection(a: a),

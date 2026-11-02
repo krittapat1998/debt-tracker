@@ -37,6 +37,35 @@ class AppTheme {
         onSurfaceVariant: const Color(0xFFA7BED0),
       ));
 
+  /// Light text on the app icon's royal blue, a shade darker.
+  static ThemeData blue() => _build(ColorScheme.fromSeed(
+        seedColor: const Color(0xFF1A6FE8),
+        brightness: Brightness.dark,
+      ).copyWith(
+        surface: const Color(0xFF1150C8),
+        surfaceDim: const Color(0xFF0C44B3),
+        surfaceBright: const Color(0xFF2A6CE0),
+        surfaceContainerLowest: const Color(0xFF0B3FA8),
+        surfaceContainerLow: const Color(0xFF1E61D9),
+        surfaceContainer: const Color(0xFF0C44B3),
+        surfaceContainerHigh: const Color(0xFF2A6CE0),
+        surfaceContainerHighest: const Color(0xFF3A79E6),
+        onSurface: Colors.white,
+        onSurfaceVariant: const Color(0xFFCFE0FF),
+        primary: const Color(0xFFA8DDFF),
+        onPrimary: const Color(0xFF003063),
+        primaryContainer: const Color(0xFF0A3A9E),
+        onPrimaryContainer: Colors.white,
+        secondaryContainer: const Color(0xFF3B7BEA),
+        onSecondaryContainer: Colors.white,
+        tertiaryContainer: const Color(0xFF3D3FB0),
+        onTertiaryContainer: Colors.white,
+        outline: const Color(0xFF8FB2F0),
+        outlineVariant: const Color(0xFF4F82E3),
+        inverseSurface: const Color(0xFFEAF1FF),
+        onInverseSurface: const Color(0xFF0F2A3D),
+      ));
+
   static ThemeData _build(ColorScheme scheme) => ThemeData(
         colorScheme: scheme,
         useMaterial3: true,

@@ -16,6 +16,20 @@ class NotificationPrefs {
   final bool billingReminders;
 }
 
+/// App look, picked in settings. [system] follows the phone's light/dark mode.
+enum ThemeChoice {
+  system('ตามระบบ'),
+  light('สว่าง'),
+  dark('มืด'),
+  blue('น้ำเงิน');
+
+  const ThemeChoice(this.label);
+  final String label;
+
+  static ThemeChoice fromName(String? name) =>
+      values.firstWhere((v) => v.name == name, orElse: () => system);
+}
+
 /// Typed access to the key/value settings table.
 class SettingsService {
   SettingsService(this._repo);
@@ -29,6 +43,7 @@ class SettingsService {
   static const _smsListen = 'sms_listen';
   static const _smsCustomPatterns = 'sms_custom_patterns';
   static const _smsSeenKeys = 'sms_seen_keys';
+  static const _theme = 'theme';
 
   Future<NotificationPrefs> notificationPrefs() async => NotificationPrefs(
         enabled: (await _repo.get(_notifEnabled)) != '0',
@@ -46,6 +61,10 @@ class SettingsService {
   Future<bool> notificationPermissionAsked() async => (await _repo.get(_notifAsked)) == '1';
 
   Future<void> setNotificationPermissionAsked() => _repo.set(_notifAsked, '1');
+
+  Future<ThemeChoice> themeChoice() async => ThemeChoice.fromName(await _repo.get(_theme));
+
+  Future<void> setThemeChoice(ThemeChoice c) => _repo.set(_theme, c.name);
 
   Future<DateTime?> lastSmsScan() async =>
       DateTime.tryParse(await _repo.get(_smsLastScan) ?? '');

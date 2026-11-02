@@ -5,6 +5,7 @@ import '../../core/formatters.dart';
 import '../../domain/finance/portfolio.dart';
 import '../providers.dart';
 import '../theme.dart';
+import '../widgets/card_colors.dart';
 import '../widgets/common.dart';
 import 'account_detail_screen.dart';
 import 'account_form_screen.dart';
@@ -79,7 +80,10 @@ class DashboardScreen extends ConsumerWidget {
                 if (s.recommendedTarget != null) _AvalancheCard(s: s),
                 const SectionHeader('บัตร/สินเชื่อ · เรียงตามวันครบกำหนด'),
                 for (final a in s.byDueDate)
-                  _AccountCard(a: a, isMostExpensive: identical(a, s.mostExpensive)),
+                  CardColorTheme(
+                    color: a.account.color,
+                    child: _AccountCard(a: a, isMostExpensive: identical(a, s.mostExpensive)),
+                  ),
               ],
             ),
           );
