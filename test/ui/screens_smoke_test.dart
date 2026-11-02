@@ -443,6 +443,21 @@ void main() {
         findsOneWidget);
   });
 
+  testWidgets('spending after the cutoff says which bill it goes on; older spending does not', (tester) async {
+    final today = dateOnly(DateTime.now());
+    final a1 = samplePortfolio().byId('a1')!;
+    await pump(
+      tester,
+      const HistoryScreen(),
+      data: samplePortfolio(spendings: [
+        Spending(id: 'new', accountId: 'a1', creditLineId: 'l1', date: today, amount: 2285.54, note: 'game 7K', createdAt: today),
+        Spending(id: 'old', accountId: 'a1', creditLineId: 'l1', date: a1.lastCutoff!.subtract(const Duration(days: 3)),
+            amount: 500, note: 'ค่าอาหาร', createdAt: today),
+      ]),
+    );
+    expect(find.textContaining('รอเรียกเก็บรอบ ${fmtDate(a1.nextCutoff!)}'), findsOneWidget);
+  });
+
   testWidgets('spending that was not added to the balance says so', (tester) async {
     final today = dateOnly(DateTime.now());
     await pump(
