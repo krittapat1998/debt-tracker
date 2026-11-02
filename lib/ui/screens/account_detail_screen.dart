@@ -1002,7 +1002,7 @@ class _PlanCardState extends ConsumerState<_PlanCard> {
             Row(
               children: [
                 Expanded(child: Text(plan.name, style: t.titleMedium)),
-                RateBadge(rate: plan.annualRate, method: plan.interestMethod),
+                RateBadge(rate: plan.rateFor(p.paidInstallments + 1), method: plan.interestMethod),
                 PopupMenuButton<String>(
                   onSelected: (v) async {
                     if (v == 'edit') {
@@ -1026,6 +1026,8 @@ class _PlanCardState extends ConsumerState<_PlanCard> {
                 ),
               ],
             ),
+            if (plan.rateSteps.isNotEmpty)
+              Text('ดอกโปรโมชั่น ${rateScheduleText(plan)}', style: t.bodySmall),
             if (plan.interestMethod == InterestMethod.flat)
               Text('flat ${fmtRate(plan.annualRate)} เท่ากับดอกจริงราว ${fmtRate(p.effectiveAnnualRate)}/ปี',
                   style: t.bodySmall?.copyWith(color: cs.error)),

@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/date_utils.dart';
 import '../../core/formatters.dart';
 import '../../data/services/ledger_service.dart';
+import '../../domain/finance/installment_engine.dart';
 import '../../domain/finance/loan_math.dart';
 import '../../domain/finance/loan_state.dart';
 import '../../domain/finance/portfolio.dart';
@@ -44,6 +45,14 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
   late final _penaltyFixed = TextEditingController(text: amountToField(_orig?.penaltyFixed == 0 ? null : _orig?.penaltyFixed));
   late final _note = TextEditingController(text: _orig?.note ?? '');
   late InterestMethod _method = _orig?.interestMethod ?? InterestMethod.reducing;
+  // Promotional rates after the first one: (from installment, rate).
+  late final List<(TextEditingController, TextEditingController)> _steps = [
+    for (final s in _orig?.rateSteps ?? const <RateStep>[])
+      (TextEditingController(text: '${s.fromInstallment}'), TextEditingController(text: '${s.annualRate}')),
+  ];
+  // Removed rows stay alive until dispose: their fields may still be mounted.
+  final _removedSteps = <TextEditingController>[];
+  late bool _useSteps = _steps.isNotEmpty;
   late bool _useOverride = _orig?.monthlyPaymentOverride != null;
   late bool _included = _orig?.includedInStatement ??
       const {AccountType.creditCard, AccountType.cashCard}.contains(widget.account.account.type);
@@ -66,10 +75,26 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
 
   @override
   void dispose() {
-    for (final c in [_name, _principal, _rate, _term, _override, _paidBefore, _posted, _lockIn, _penaltyPct, _penaltyFixed, _note]) {
+    for (final c in [
+      _name, _principal, _rate, _term, _override, _paidBefore, _posted, _lockIn, _penaltyPct, _penaltyFixed, _note,
+      for (final (from, rate) in _steps) ...[from, rate],
+      ..._removedSteps,
+    ]) {
       c.dispose();
     }
     super.dispose();
+  }
+
+  /// Valid steps only, by installment; a repeated installment keeps the last.
+  List<RateStep> _parsedSteps() {
+    if (!_useSteps || _method != InterestMethod.reducing) return const [];
+    final byFrom = <int, double>{};
+    for (final (from, rate) in _steps) {
+      final n = int.tryParse(from.text);
+      final r = parseAmount(rate.text);
+      if (n != null && n >= 2 && r != null) byFrom[n] = r;
+    }
+    return [for (final n in byFrom.keys.toList()..sort()) RateStep(fromInstallment: n, annualRate: byFrom[n]!)];
   }
 
   InstallmentPlan? _draft() {
@@ -110,6 +135,7 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
       paidBeforeTracking: paidBefore,
       anchorDay: anchorDay,
       postedThrough: postedThrough,
+      rateSteps: _parsedSteps(),
       note: _note.text.trim().isEmpty ? null : _note.text.trim(),
       createdAt: _orig?.createdAt ?? DateTime.now(),
     );
@@ -214,6 +240,56 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
               selected: {_method},
               onSelectionChanged: (s) => setState(() => _method = s.first),
             ),
+            if (_method == InterestMethod.reducing) ...[
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('ดอกเบี้ยโปรโมชั่นเปลี่ยนตามงวด'),
+                subtitle: const Text('เช่น งวด 1–3 ดอก 21.99% แล้วงวด 4–6 ดอก 24% · ช่องดอกเบี้ยด้านบนคือดอกของงวดแรก'),
+                value: _useSteps,
+                onChanged: (v) => setState(() {
+                  _useSteps = v;
+                  if (v && _steps.isEmpty) _steps.add((TextEditingController(), TextEditingController()));
+                }),
+              ),
+              if (_useSteps) ...[
+                for (final (i, (from, rate)) in _steps.indexed)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: IntField(controller: from, label: 'ตั้งแต่งวดที่', min: 2, max: int.tryParse(_term.text) ?? 600),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: AmountField(controller: rate, label: 'ดอกเบี้ยต่อปี', suffix: '%', required: true),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.remove_circle_outline),
+                          tooltip: 'ลบช่วงนี้',
+                          onPressed: () => setState(() {
+                            final removed = _steps.removeAt(i);
+                            _removedSteps.addAll([removed.$1, removed.$2]);
+                            if (_steps.isEmpty) _useSteps = false;
+                          }),
+                        ),
+                      ],
+                    ),
+                  ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    icon: const Icon(Icons.add),
+                    label: const Text('เพิ่มช่วงดอกเบี้ย'),
+                    onPressed: () => setState(() => _steps.add((TextEditingController(), TextEditingController()))),
+                  ),
+                ),
+                if (_draft() case final d? when d.rateSteps.isNotEmpty)
+                  Text(rateScheduleText(d), style: Theme.of(context).textTheme.bodySmall),
+                formGap,
+              ],
+            ],
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('ธนาคารกำหนดค่าผ่อนต่อเดือนมาแล้ว'),
@@ -321,7 +397,10 @@ class _Preview extends StatelessWidget {
       termMonths: p.termMonths,
       paymentOverride: p.monthlyPaymentOverride,
     );
-    final interest = s.projectedInterest;
+    final interest = s
+        .project(rateOf: InstallmentEngine.rateOf(p), keepPayment: p.monthlyPaymentOverride != null)
+        .fold(0.0, (sum, r) => sum + r.interest);
+    final promo = p.rateSteps.isNotEmpty && p.interestMethod == InterestMethod.reducing;
     final effective = p.interestMethod == InterestMethod.flat
         ? LoanMath.effectiveAnnualRate(p.principal, s.payment, p.termMonths)
         : (p.monthlyPaymentOverride != null
@@ -340,11 +419,14 @@ class _Preview extends StatelessWidget {
           children: [
             Text('สรุปค่าใช้จ่าย', style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 6),
-            InfoRow('ค่าผ่อนต่อเดือน', fmtMoney(s.payment), bold: true),
+            InfoRow(promo && p.monthlyPaymentOverride == null ? 'ค่าผ่อนงวดแรก' : 'ค่าผ่อนต่อเดือน', fmtMoney(s.payment),
+                bold: true),
             InfoRow('ดอกเบี้ยรวมทั้งสัญญา', fmtMoney(interest), valueColor: cs.error),
             InfoRow('ยอดชำระรวม', fmtMoney(p.principal + interest)),
-            InfoRow('ดอกเบี้ยจริงต่อปี (เทียบแบบลดต้นลดดอก)', '${fmtPercent(effective)}/ปี', bold: true),
-            if (p.annualRate > 0 && p.monthlyPaymentOverride == null)
+            if (!promo || p.monthlyPaymentOverride != null)
+              InfoRow(promo ? 'ดอกเบี้ยเฉลี่ยทั้งสัญญา' : 'ดอกเบี้ยจริงต่อปี (เทียบแบบลดต้นลดดอก)', '${fmtPercent(effective)}/ปี',
+                  bold: true),
+            if (p.annualRate > 0 && p.monthlyPaymentOverride == null && !promo)
               Padding(
                 padding: const EdgeInsets.only(top: 6),
                 child: Text(

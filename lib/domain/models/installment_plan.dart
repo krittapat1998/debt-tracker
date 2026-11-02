@@ -1,5 +1,20 @@
+import 'dart:convert';
+
 import '../../core/date_utils.dart';
 import 'enums.dart';
+
+/// A promotional rate change: from installment [fromInstallment] on, the
+/// plan charges [annualRate] (e.g. งวด 4–6 at 24% after 21.99% for 1–3).
+class RateStep {
+  const RateStep({required this.fromInstallment, required this.annualRate});
+  final int fromInstallment;
+  final double annualRate;
+
+  Map<String, Object?> toJson() => {'from': fromInstallment, 'rate': annualRate};
+
+  factory RateStep.fromJson(Map<String, Object?> m) =>
+      RateStep(fromInstallment: (m['from'] as num).toInt(), annualRate: (m['rate'] as num).toDouble());
+}
 
 /// A fixed-term installment contract (ผ่อนสินค้า, แบ่งจ่าย, สินเชื่อก้อน).
 /// Its progress (paid installments, remaining principal, interest paid) is
@@ -24,6 +39,7 @@ class InstallmentPlan {
     this.paidBeforeTracking = 0,
     this.anchorDay,
     this.postedThrough,
+    this.rateSteps = const [],
     this.note,
     required this.createdAt,
   });
@@ -78,11 +94,24 @@ class InstallmentPlan {
   /// Card-billed plans: how many installments the app has put on the
   /// sub-limit balance. Null = not started (saved by an older version).
   final int? postedThrough;
+
+  /// Later rates of a promotional plan, by first installment; before the
+  /// first step the plan charges [annualRate]. Reducing balance only.
+  final List<RateStep> rateSteps;
   final String? note;
   final DateTime createdAt;
 
   DateTime dueDateOf(int installmentNumber) =>
       addMonths(startDate, installmentNumber - 1, anchorDay: anchorDay ?? startDate.day);
+
+  /// The annual rate charged on installment [n].
+  double rateFor(int n) {
+    var rate = annualRate;
+    for (final s in rateSteps) {
+      if (n >= s.fromInstallment) rate = s.annualRate;
+    }
+    return rate;
+  }
 
   /// How many installments fall due on or before [day].
   int dueCountBy(DateTime day) {
@@ -112,6 +141,7 @@ class InstallmentPlan {
         paidBeforeTracking: paidBeforeTracking,
         anchorDay: anchorDay ?? this.anchorDay,
         postedThrough: postedThrough ?? this.postedThrough,
+        rateSteps: rateSteps,
         note: note,
         createdAt: createdAt,
       );
@@ -137,6 +167,7 @@ class InstallmentPlan {
         'paid_before_tracking': paidBeforeTracking,
         'anchor_day': anchorDay,
         'posted_through': postedThrough,
+        'rate_steps': rateSteps.isEmpty ? null : jsonEncode([for (final s in rateSteps) s.toJson()]),
         'note': note,
         'created_at': createdAt.toIso8601String(),
       };
@@ -161,6 +192,12 @@ class InstallmentPlan {
         paidBeforeTracking: (m['paid_before_tracking'] as num?)?.toInt() ?? 0,
         anchorDay: (m['anchor_day'] as num?)?.toInt(),
         postedThrough: (m['posted_through'] as num?)?.toInt(),
+        rateSteps: m['rate_steps'] == null
+            ? const []
+            : ([
+                for (final s in jsonDecode(m['rate_steps'] as String) as List)
+                  RateStep.fromJson((s as Map).cast<String, Object?>()),
+              ]..sort((a, b) => a.fromInstallment.compareTo(b.fromInstallment))),
         note: m['note'] as String?,
         createdAt: DateTime.parse(m['created_at'] as String),
       );

@@ -89,6 +89,46 @@ void main() {
     expect(p.dueCountBy(DateTime(2030)), 11);
   });
 
+  group('promotional rate steps', () {
+    // TTB cash chill chill: ฿10,000 in 6 × ฿1,785, 21.99% for 1–3, 24% for 4–6.
+    final ttb = InstallmentPlan(id: 'ttb', accountId: 'a', name: 'cash chill chill', principal: 10000, annualRate: 21.99,
+        interestMethod: InterestMethod.reducing, termMonths: 6, monthlyPaymentOverride: 1785,
+        startDate: DateTime(2026, 8, 20), rateSteps: const [RateStep(fromInstallment: 4, annualRate: 24)],
+        createdAt: DateTime(2026, 7, 15));
+
+    test('each installment is charged its own rate; the fixed installment stays', () {
+      expect([for (var n = 1; n <= 6; n++) ttb.rateFor(n)], [21.99, 21.99, 21.99, 24, 24, 24]);
+      final s = InstallmentEngine.replay(ttb, const [], asOf: DateTime(2026, 7, 16));
+      final rows = s.projection;
+      expect(rows, hasLength(6));
+      expect(rows[0].interest, closeTo(10000 * 21.99 / 1200, 0.005));
+      expect(rows[3].interest, closeTo(rows[2].balance * 24 / 1200, 0.005));
+      expect(rows.take(5).every((r) => (r.payment - 1785).abs() < 0.005), isTrue);
+      expect(rows.last.balance, 0);
+      // The rate shown is the next installment's.
+      expect(s.effectiveAnnualRate, 21.99);
+      expect(InstallmentEngine.replay(ttb.copyWith(postedThrough: 3), const [], asOf: DateTime(2026, 7, 16)).effectiveAnnualRate,
+          21.99);
+    });
+
+    test('paid installments use their own rate, and the next rate shows after the third', () {
+      final paid = InstallmentPlan.fromMap({...ttb.toMap(), 'paid_before_tracking': 3});
+      expect(paid.rateSteps.single.annualRate, 24);
+      final s = InstallmentEngine.replay(paid, const [], asOf: DateTime(2026, 11, 3));
+      expect(s.paidRows[2].interest, closeTo(s.paidRows[1].balance * 21.99 / 1200, 0.005));
+      expect(s.projection.first.interest, closeTo(s.paidRows[2].balance * 24 / 1200, 0.005));
+      expect(s.effectiveAnnualRate, 24);
+    });
+
+    test('without a bank-fixed installment, the payment is re-amortized when the rate changes', () {
+      final free = InstallmentPlan.fromMap({...ttb.toMap(), 'monthly_payment_override': null});
+      final rows = InstallmentEngine.replay(free, const [], asOf: DateTime(2026, 7, 16)).projection;
+      expect(rows[3].payment, greaterThan(rows[2].payment));
+      expect(rows.last.balance, 0);
+      expect(rows, hasLength(6));
+    });
+  });
+
   group('InstallmentEngine.replay', () {
     final p = plan('loan', 'a');
     final m = LoanMath.amortizedPayment(12000, 0.01, 12);

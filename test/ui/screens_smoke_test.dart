@@ -573,11 +573,35 @@ void main() {
     expect(themeForCard(AppTheme.light(), const Color(0xFF212121)).colorScheme.onSurface, Colors.white);
   });
 
+  testWidgets('plan form: a promotional rate that changes from installment 4', (tester) async {
+    final ledger = _RecordingLedger();
+    await pump(tester, PlanFormScreen(account: portfolio.byId('a2')!), ledger: ledger);
+    await tester.enterText(find.widgetWithText(TextFormField, 'ชื่อรายการ'), 'cash chill chill');
+    await tester.enterText(find.widgetWithText(TextFormField, 'เงินต้นตั้งต้น'), '10000');
+    await tester.enterText(find.widgetWithText(TextFormField, 'ดอกเบี้ยต่อปี'), '21.99');
+    await tester.enterText(find.widgetWithText(TextFormField, 'จำนวนงวด'), '6');
+    await settle(tester);
+    await tester.scrollUntilVisible(find.text('ดอกเบี้ยโปรโมชั่นเปลี่ยนตามงวด'), 200, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('ดอกเบี้ยโปรโมชั่นเปลี่ยนตามงวด'));
+    await settle(tester);
+    await tester.enterText(find.widgetWithText(TextFormField, 'ตั้งแต่งวดที่'), '4');
+    await tester.enterText(find.widgetWithText(TextFormField, 'ดอกเบี้ยต่อปี').last, '24');
+    await settle(tester);
+    expect(find.text('งวด 1–3 21.99% · งวด 4–6 24%'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('บันทึก'), 500, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('บันทึก'));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await settle(tester);
+    final saved = ledger.savedPlans.single;
+    expect((saved.annualRate, saved.rateSteps.single.fromInstallment, saved.rateSteps.single.annualRate), (21.99, 4, 24.0));
+  });
+
   testWidgets('plan form: principal from the installment, and a check of what counts as paid', (tester) async {
     await pump(tester, PlanFormScreen(account: portfolio.byId('a2')!));
     await tester.enterText(find.widgetWithText(TextFormField, 'ชื่อรายการ'), 'UOB Express');
     await tester.enterText(find.widgetWithText(TextFormField, 'ดอกเบี้ยต่อปี'), '25');
     await tester.enterText(find.widgetWithText(TextFormField, 'จำนวนงวด'), '11');
+    await tester.scrollUntilVisible(find.text('ธนาคารกำหนดค่าผ่อนต่อเดือนมาแล้ว'), 200, scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('ธนาคารกำหนดค่าผ่อนต่อเดือนมาแล้ว'));
     await settle(tester);
     await tester.enterText(find.widgetWithText(TextFormField, 'ค่าผ่อนต่อเดือน'), '3000');
@@ -585,6 +609,8 @@ void main() {
     await tester.tap(find.text('ไม่รู้เงินต้น? คำนวณจากค่าผ่อนนี้'));
     await settle(tester);
     final principal = LoanMath.round2(LoanMath.principalForPayment(3000, 25, 11));
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, 2000));
+    await settle(tester);
     expect(find.widgetWithText(TextFormField, amountToField(principal)), findsOneWidget);
 
     // Paid separately: the first due date is next month, so nothing is due yet.
@@ -634,6 +660,7 @@ void main() {
     await tester.enterText(find.widgetWithText(TextFormField, 'เงินต้นตั้งต้น'), '100000');
     await tester.enterText(find.widgetWithText(TextFormField, 'จำนวนงวด'), '12');
     await settle(tester);
+    await tester.scrollUntilVisible(find.text('สรุปค่าใช้จ่าย'), 200, scrollable: find.byType(Scrollable).first);
     expect(find.text('สรุปค่าใช้จ่าย'), findsOneWidget);
     final a3 = portfolio.byId('a3')!;
     await pump(tester, PlanFormScreen(account: a3, existing: a3.plans.first.plan));

@@ -39,7 +39,9 @@ class InstallmentState {
       projection.fold(0.0, (s, r) => s + r.interest);
 
   /// Interest of the original contract if no prepayment ever happened.
-  double get originalTotalInterest => initial.projectedInterest;
+  double get originalTotalInterest => initial
+      .project(rateOf: InstallmentEngine.rateOf(plan), keepPayment: plan.monthlyPaymentOverride != null)
+      .fold(0.0, (s, r) => s + r.interest);
 
   /// Interest already avoided thanks to prepayments so far.
   double get interestSavedSoFar =>
@@ -49,9 +51,10 @@ class InstallmentState {
   ScheduleRow? get nextRow => projection.isEmpty ? null : projection.first;
   DateTime? get projectedPayoffDate => projection.isEmpty ? null : projection.last.dueDate;
 
-  /// The real cost of the plan expressed as a reducing-balance rate.
+  /// The real cost of the plan expressed as a reducing-balance rate; for a
+  /// promotional plan, the rate of the next installment.
   double get effectiveAnnualRate => plan.interestMethod == InterestMethod.reducing
-      ? plan.annualRate
+      ? plan.rateFor(paidInstallments + 1)
       : LoanMath.effectiveAnnualRate(plan.principal, initial.payment, plan.termMonths);
 
   DateTime? get earliestClosureDate => plan.earliestClosureDate;
@@ -79,6 +82,10 @@ class InstallmentState {
 class InstallmentEngine {
   InstallmentEngine._();
 
+  /// A promotional plan's rate per installment; null for a single rate.
+  static double Function(int)? rateOf(InstallmentPlan plan) =>
+      plan.rateSteps.isEmpty || plan.interestMethod != InterestMethod.reducing ? null : plan.rateFor;
+
   static LoanState initialState(InstallmentPlan plan) => LoanState.initial(
         method: plan.interestMethod,
         principal: plan.principal,
@@ -103,9 +110,13 @@ class InstallmentEngine {
     var principalPaid = 0.0;
     var extraPaid = 0.0;
 
+    final rates = rateOf(plan);
+    final keepPayment = plan.monthlyPaymentOverride != null;
+
     void applyInstallment({double? amount, DateTime? paidOn, bool automatic = false}) {
-      final step = state.payInstallment(amount);
       final number = paidRows.length + 1;
+      if (rates != null) state = state.atRate(rates(number), keepPayment: keepPayment);
+      final step = state.payInstallment(amount);
       paidRows.add(ScheduleRow(
         number: number,
         dueDate: plan.dueDateOf(number),
@@ -172,6 +183,8 @@ class InstallmentEngine {
     final projection = state.project(
       firstNumber: paidRows.length + 1,
       dueDateOf: plan.dueDateOf,
+      rateOf: rates,
+      keepPayment: keepPayment,
     );
 
     return InstallmentState(
