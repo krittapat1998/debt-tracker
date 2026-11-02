@@ -584,7 +584,34 @@ void main() {
     await tester.scrollUntilVisible(find.text('ดอกเบี้ยโปรโมชั่นเปลี่ยนตามงวด'), 200, scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('ดอกเบี้ยโปรโมชั่นเปลี่ยนตามงวด'));
     await settle(tester);
-    await tester.enterText(find.widgetWithText(TextFormField, 'ตั้งแต่งวดที่'), '4');
+    // Typed as on the bank's paper: "4-6".
+    await tester.enterText(find.widgetWithText(TextFormField, 'งวดที่'), '4-6');
+    await tester.enterText(find.widgetWithText(TextFormField, 'ดอกเบี้ยต่อปี').last, '24');
+    await settle(tester);
+    expect(find.text('งวด 1–3 21.99% · งวด 4–6 24%'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('บันทึก'), 500, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('บันทึก'));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await settle(tester);
+    final saved = ledger.savedPlans.single;
+    expect((saved.annualRate, saved.rateSteps.single.fromInstallment, saved.rateSteps.single.annualRate), (21.99, 4, 24.0));
+  });
+
+  testWidgets('plan form: both promo periods typed like the bank paper, 01-03 and 04-06', (tester) async {
+    final ledger = _RecordingLedger();
+    await pump(tester, PlanFormScreen(account: portfolio.byId('a2')!), ledger: ledger);
+    await tester.enterText(find.widgetWithText(TextFormField, 'ชื่อรายการ'), 'cash chill chill');
+    await tester.enterText(find.widgetWithText(TextFormField, 'เงินต้นตั้งต้น'), '10000');
+    await tester.enterText(find.widgetWithText(TextFormField, 'จำนวนงวด'), '6');
+    await settle(tester);
+    await tester.scrollUntilVisible(find.text('ดอกเบี้ยโปรโมชั่นเปลี่ยนตามงวด'), 200, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('ดอกเบี้ยโปรโมชั่นเปลี่ยนตามงวด'));
+    await settle(tester);
+    await tester.enterText(find.widgetWithText(TextFormField, 'งวดที่'), '01-03');
+    await tester.enterText(find.widgetWithText(TextFormField, 'ดอกเบี้ยต่อปี').last, '21.99');
+    await tester.tap(find.text('เพิ่มช่วงดอกเบี้ย'));
+    await settle(tester);
+    await tester.enterText(find.widgetWithText(TextFormField, 'งวดที่').last, '04-06');
     await tester.enterText(find.widgetWithText(TextFormField, 'ดอกเบี้ยต่อปี').last, '24');
     await settle(tester);
     expect(find.text('งวด 1–3 21.99% · งวด 4–6 24%'), findsOneWidget);

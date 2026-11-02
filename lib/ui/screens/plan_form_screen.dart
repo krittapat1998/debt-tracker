@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/date_utils.dart';
@@ -47,9 +48,23 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
   late InterestMethod _method = _orig?.interestMethod ?? InterestMethod.reducing;
   // Promotional rates after the first one: (from installment, rate).
   late final List<(TextEditingController, TextEditingController)> _steps = [
-    for (final s in _orig?.rateSteps ?? const <RateStep>[])
-      (TextEditingController(text: '${s.fromInstallment}'), TextEditingController(text: '${s.annualRate}')),
+    for (final (i, s) in (_orig?.rateSteps ?? const <RateStep>[]).indexed)
+      (
+        TextEditingController(text: '${s.fromInstallment}-${_stepEnd(_orig!, i)}'),
+        TextEditingController(text: '${s.annualRate}'),
+      ),
   ];
+
+  /// Last installment of step [i]: the one before the next step, or the term.
+  static int _stepEnd(InstallmentPlan p, int i) =>
+      i + 1 < p.rateSteps.length ? p.rateSteps[i + 1].fromInstallment - 1 : p.termMonths;
+
+  /// "4-6", "04 - 06" or just "4": the first and (optional) last installment.
+  static (int, int?)? _parseRange(String text) {
+    final m = RegExp(r'^\s*(\d+)\s*(?:[-–]\s*(\d+))?\s*$').firstMatch(text);
+    if (m == null) return null;
+    return (int.parse(m.group(1)!), m.group(2) == null ? null : int.parse(m.group(2)!));
+  }
   // Removed rows stay alive until dispose: their fields may still be mounted.
   final _removedSteps = <TextEditingController>[];
   late bool _useSteps = _steps.isNotEmpty;
@@ -85,16 +100,27 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
     super.dispose();
   }
 
-  /// Valid steps only, by installment; a repeated installment keeps the last.
-  List<RateStep> _parsedSteps() {
-    if (!_useSteps || _method != InterestMethod.reducing) return const [];
+  /// Promo rows by first installment (a repeated one keeps the last).
+  Map<int, double> _promoRows() {
+    if (!_useSteps || _method != InterestMethod.reducing) return const {};
     final byFrom = <int, double>{};
     for (final (from, rate) in _steps) {
-      final n = int.tryParse(from.text);
+      final range = _parseRange(from.text);
       final r = parseAmount(rate.text);
-      if (n != null && n >= 2 && r != null) byFrom[n] = r;
+      if (range != null && range.$1 >= 1 && r != null) byFrom[range.$1] = r;
     }
-    return [for (final n in byFrom.keys.toList()..sort()) RateStep(fromInstallment: n, annualRate: byFrom[n]!)];
+    return byFrom;
+  }
+
+  /// Rate of installment 1: a promo row starting at 1 (typed as in the
+  /// bank's paper, "1-3"), else the rate field above.
+  double _firstRate() => _promoRows()[1] ?? parseAmount(_rate.text) ?? 0;
+
+  List<RateStep> _parsedSteps() {
+    final rows = _promoRows();
+    return [
+      for (final n in rows.keys.where((n) => n >= 2).toList()..sort()) RateStep(fromInstallment: n, annualRate: rows[n]!),
+    ];
   }
 
   InstallmentPlan? _draft() {
@@ -123,7 +149,7 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
       creditLineId: _lineId,
       name: _name.text.trim(),
       principal: principal,
-      annualRate: parseAmount(_rate.text) ?? 0,
+      annualRate: _firstRate(),
       interestMethod: _method,
       termMonths: term,
       monthlyPaymentOverride: _useOverride ? parseAmount(_override.text) : null,
@@ -244,7 +270,8 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('ดอกเบี้ยโปรโมชั่นเปลี่ยนตามงวด'),
-                subtitle: const Text('เช่น งวด 1–3 ดอก 21.99% แล้วงวด 4–6 ดอก 24% · ช่องดอกเบี้ยด้านบนคือดอกของงวดแรก'),
+                subtitle: const Text('ใส่ตามเอกสารธนาคาร เช่น งวด 1-3 ดอก 21.99% และงวด 4-6 ดอก 24% '
+                    '(ถ้าไม่ใส่ช่วงที่เริ่มงวด 1 จะใช้ช่องดอกเบี้ยด้านบนเป็นดอกของงวดแรก)'),
                 value: _useSteps,
                 onChanged: (v) => setState(() {
                   _useSteps = v;
@@ -259,7 +286,21 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
-                          child: IntField(controller: from, label: 'ตั้งแต่งวดที่', min: 2, max: int.tryParse(_term.text) ?? 600),
+                          child: TextFormField(
+                            controller: from,
+                            keyboardType: const TextInputType.numberWithOptions(signed: true),
+                            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9\- –]'))],
+                            decoration: const InputDecoration(labelText: 'งวดที่', hintText: 'เช่น 4-6'),
+                            validator: (v) {
+                              final range = _parseRange(v ?? '');
+                              final term = int.tryParse(_term.text) ?? 600;
+                              if (range == null) return 'ใส่เลขงวด เช่น 4 หรือ 4-6';
+                              final (start, end) = range;
+                              if (start < 1 || start > term) return 'งวด 1–$term';
+                              if (end != null && (end < start || end > term)) return 'ช่วงไม่ถูกต้อง';
+                              return null;
+                            },
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
