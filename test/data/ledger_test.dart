@@ -298,6 +298,8 @@ void main() {
     });
 
     test('records every charge that came due, once', () async {
+      // Set up the day before its first charge.
+      now = DateTime(2026, 8, 30, 9);
       await ledger.saveRecurring(netflix());
       // The app wasn't opened for two months.
       now = DateTime(2026, 11, 1, 8);
@@ -314,6 +316,7 @@ void main() {
     });
 
     test('overlapping runs record nothing twice', () async {
+      now = DateTime(2026, 8, 30, 9);
       await ledger.saveRecurring(netflix());
       now = DateTime(2026, 11, 1, 8);
       await Future.wait([ledger.recordDueCharges(), ledger.recordDueCharges()]);
@@ -340,6 +343,28 @@ void main() {
       await ledger.recordDueCharges();
       expect(await ledger.coveredByRecurring('a', 419, DateTime(2026, 12, 1)), isTrue);
       expect(await ledger.coveredByRecurring('a', 420, DateTime(2026, 12, 1)), isFalse);
+    });
+
+    test('a charge the card just took is recorded on saving, once, as the user says about the balance', () async {
+      // Netflix was charged yesterday; the balance typed in on 1 Oct does not have it.
+      final saved = await ledger.saveRecurring(netflix(next: DateTime(2026, 9, 30)), alreadyInBalance: false);
+      // Charged on the 30th, so the next one is on 30 Oct.
+      expect(saved.nextDate, DateTime(2026, 10, 30));
+      expect((await recurring.getAll()).single.nextDate, DateTime(2026, 10, 30));
+      final s = (await spendings.getAll()).single;
+      expect((s.date, s.amount, s.note, s.source), (DateTime(2026, 9, 30), 419.0, 'Netflix', PaymentSource.recurring));
+      expect((await lines.getById('l'))!.balance, 10419);
+
+      // Saving it again on the same date (an edit) records nothing new.
+      await ledger.saveRecurring(netflix(next: DateTime(2026, 9, 30)), alreadyInBalance: false);
+      expect(await spendings.getAll(), hasLength(1));
+      expect(await ledger.recordDueCharges(), 0);
+    });
+
+    test('"the balance already has it" keeps it out of the balance', () async {
+      await ledger.saveRecurring(netflix(next: DateTime(2026, 9, 30)), alreadyInBalance: true);
+      expect((await spendings.getAll()).single.lineBalanceApplied, 0);
+      expect((await lines.getById('l'))!.balance, 10000);
     });
 
     test('deleting a charge keeps what it recorded', () async {

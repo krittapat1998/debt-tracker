@@ -167,7 +167,15 @@ class LedgerService {
     await spendings.delete(id);
   }
 
-  Future<void> saveRecurring(RecurringCharge charge) => recurring.save(charge);
+  /// Saves a recurring charge. Rounds dated today or earlier (a charge the
+  /// card just took) are recorded as spending right away, the balance
+  /// already having them when [alreadyInBalance] says so (null = guess from
+  /// the dates), and the charge moves on to its next date.
+  Future<RecurringCharge> saveRecurring(RecurringCharge charge, {bool? alreadyInBalance}) async {
+    final saved = await _catchUp(charge, alreadyInBalance: alreadyInBalance);
+    await recurring.save(saved);
+    return saved;
+  }
 
   /// Stops a recurring charge; what it already recorded stays in the history.
   Future<void> deleteRecurring(String id) => recurring.delete(id);
@@ -245,12 +253,24 @@ class LedgerService {
   Future<int> _recordDueCharges() async {
     final today = dateOnly(_now());
     var count = 0;
-    for (var c in await recurring.getAll()) {
-      // Bounded in case of a corrupt date far in the past.
-      for (var i = 0; c.active && !c.nextDate.isAfter(today) && i < 400; i++) {
-        // The bank's own SMS for this charge may have been imported already.
-        if (!await _hasNearby(c.accountId, c.amount, c.nextDate, const {PaymentSource.sms, PaymentSource.email})) {
-          await recordSpending(Spending(
+    for (final c in await recurring.getAll()) {
+      if (!c.active || c.nextDate.isAfter(today)) continue;
+      final before = (await spendings.getAll()).length;
+      await recurring.save(await _catchUp(c));
+      count += (await spendings.getAll()).length - before;
+    }
+    return count;
+  }
+
+  /// Records every round of [c] dated today or earlier and returns it moved
+  /// on to its next future date.
+  Future<RecurringCharge> _catchUp(RecurringCharge c, {bool? alreadyInBalance}) async {
+    final today = dateOnly(_now());
+    // Bounded in case of a corrupt date far in the past.
+    for (var i = 0; c.active && !c.nextDate.isAfter(today) && i < 400; i++) {
+      if (!await _recorded(c)) {
+        await recordSpending(
+          Spending(
             id: newId(),
             accountId: c.accountId,
             creditLineId: c.creditLineId,
@@ -259,15 +279,24 @@ class LedgerService {
             note: c.name,
             source: PaymentSource.recurring,
             createdAt: _now(),
-          ));
-          count++;
-        }
-        c = c.copyWith(nextDate: c.following(c.nextDate));
-        await recurring.save(c);
+          ),
+          alreadyInBalance: alreadyInBalance,
+        );
       }
+      c = c.copyWith(nextDate: c.following(c.nextDate));
     }
-    return count;
+    return c;
   }
+
+  /// This round of [c] is in already: from the bank's SMS, or recorded
+  /// before (an edited charge moved back onto a past date).
+  Future<bool> _recorded(RecurringCharge c) async =>
+      await _hasNearby(c.accountId, c.amount, c.nextDate, const {PaymentSource.sms, PaymentSource.email}) ||
+      (await spendings.getAll()).any((s) =>
+          s.accountId == c.accountId &&
+          s.source == PaymentSource.recurring &&
+          s.note == c.name &&
+          daysBetween(s.date, c.nextDate).abs() <= 3);
 
   /// Whether a recurring charge already recorded this spending (same card
   /// and amount within 3 days), e.g. when the bank's SMS for it comes in.
