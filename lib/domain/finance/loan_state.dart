@@ -179,17 +179,34 @@ class LoanState {
     }
   }
 
+  /// The same loan from now on at [rate], e.g. when a promotional rate
+  /// ends. A bank-fixed installment ([keepPayment]) stays; otherwise the
+  /// payment is re-amortized over the remaining term. Reducing balance only.
+  LoanState atRate(double rate, {required bool keepPayment}) {
+    if (method != InterestMethod.reducing || isClosed || (rate - annualRate).abs() < 1e-9) return this;
+    return _copy(
+      annualRate: rate,
+      payment: keepPayment
+          ? payment
+          : LoanMath.amortizedPayment(balance, LoanMath.monthlyRate(rate), math.max(1, remainingTerm)),
+    );
+  }
+
   /// Future installments if every one is paid as scheduled. Dates are
-  /// attached by the caller through [dueDateOf].
+  /// attached by the caller through [dueDateOf]; [rateOf] gives a
+  /// promotional plan's rate per installment (see [atRate]).
   List<ScheduleRow> project({
     int firstNumber = 1,
     DateTime? Function(int number)? dueDateOf,
+    double Function(int number)? rateOf,
+    bool keepPayment = true,
     int maxRows = 600,
   }) {
     final rows = <ScheduleRow>[];
     var s = this;
     var number = firstNumber;
     while (!s.isClosed && rows.length < maxRows) {
+      if (rateOf != null) s = s.atRate(rateOf(number), keepPayment: keepPayment);
       final step = s.payInstallment();
       if (step.principal <= 0 && step.state.balance >= s.balance) break; // never amortizes
       rows.add(ScheduleRow(

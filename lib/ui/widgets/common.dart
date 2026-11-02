@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/formatters.dart';
 import '../../domain/finance/portfolio.dart';
 import '../../domain/models/enums.dart';
+import '../../domain/models/installment_plan.dart';
 import '../theme.dart';
 
 /// Renders loading / error states for an [AsyncValue] uniformly.
@@ -150,6 +151,20 @@ class AccountRateBadge extends StatelessWidget {
     final rates = {for (final d in a.debtItems) d.effectiveRate.toStringAsFixed(2)};
     return RateBadge(rate: a.topRate, highlight: highlight, prefix: rates.length > 1 ? 'ดอกสูงสุด' : 'ดอก');
   }
+}
+
+/// A promotional plan's rates by installment, e.g. "งวด 1–3 21.99% · งวด 4–6 24%".
+String rateScheduleText(InstallmentPlan p) {
+  final parts = <String>[];
+  var from = 1;
+  final steps = p.rateSteps;
+  for (var i = 0; i <= steps.length; i++) {
+    final to = i < steps.length ? steps[i].fromInstallment - 1 : p.termMonths;
+    final rate = i == 0 ? p.annualRate : steps[i - 1].annualRate;
+    if (to >= from) parts.add('งวด ${from == to ? '$from' : '$from–$to'} ${fmtRate(rate)}');
+    from = to + 1;
+  }
+  return parts.join(' · ');
 }
 
 class Pill extends StatelessWidget {
