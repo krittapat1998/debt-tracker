@@ -111,22 +111,22 @@ class SettingsScreen extends ConsumerWidget {
           ),
           ListTile(
             leading: const Icon(Icons.rule),
-            title: const Text('รูปแบบ SMS ธนาคาร'),
-            subtitle: const Text('เพิ่ม/ทดสอบ regex สำหรับธนาคารของคุณ'),
+            title: const Text('ทดสอบการอ่าน SMS ธนาคาร'),
+            subtitle: const Text('ลองว่าแอพอ่านข้อความจากธนาคารของคุณได้ไหม'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SmsPatternsScreen())),
           ),
           const SectionHeader('สำรองข้อมูล'),
           ListTile(
             leading: const Icon(Icons.lock_outline),
-            title: const Text('ส่งออกไฟล์สำรอง (JSON)'),
-            subtitle: const Text('แนะนำให้ตั้งรหัสผ่าน (เข้ารหัส AES-256) ก่อนฝากไว้บน cloud'),
+            title: const Text('สำรองข้อมูลทั้งหมด'),
+            subtitle: const Text('ได้ไฟล์ไว้กู้คืนหรือย้ายเครื่อง ตั้งรหัสผ่านล็อกไฟล์ได้ ควรตั้งก่อนเก็บไว้ใน iCloud หรือ Google Drive'),
             onTap: () => _exportJson(context, ref),
           ),
           ListTile(
             leading: const Icon(Icons.table_chart_outlined),
-            title: const Text('ส่งออก CSV'),
-            subtitle: const Text('เปิดใน Excel / Google Sheets (ไม่เข้ารหัส)'),
+            title: const Text('ส่งออกเป็นตาราง'),
+            subtitle: const Text('เปิดดูใน Excel หรือ Google Sheets (ไฟล์นี้ไม่มีรหัสผ่าน)'),
             onTap: () => _exportCsv(context, ref),
           ),
           ListTile(
@@ -139,9 +139,9 @@ class SettingsScreen extends ConsumerWidget {
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 20),
             child: Text(
-              'ข้อมูลทั้งหมดเก็บในฐานข้อมูลบนเครื่องนี้เท่านั้น ไม่มี server และไม่มีการส่งข้อมูลออก '
-              'SMS ถูกพาร์สในเครื่อง ไม่ส่งข้อความดิบไปที่ใด ไฟล์สำรองที่ไม่ได้ตั้งรหัสผ่านเป็นข้อความธรรมดา '
-              'ควรตั้งรหัสผ่านทุกครั้งก่อนเก็บไว้นอกเครื่อง',
+              'ข้อมูลทั้งหมดเก็บในเครื่องนี้เท่านั้น ไม่ได้ส่งขึ้นอินเทอร์เน็ต '
+              'แอพอ่าน SMS ในเครื่องเอง ไม่ส่งข้อความไปที่ไหน ไฟล์สำรองที่ไม่ได้ตั้งรหัสผ่าน ใครได้ไฟล์ไปก็เปิดอ่านได้ '
+              'จึงควรตั้งรหัสผ่านทุกครั้งก่อนเก็บไว้นอกเครื่อง',
             ),
           ),
         ],
@@ -233,7 +233,7 @@ class SettingsScreen extends ConsumerWidget {
                 controller: pw,
                 obscureText: true,
                 autofocus: true,
-                decoration: InputDecoration(labelText: 'รหัสผ่าน', helperText: confirm ? 'เว้นว่าง = ไม่เข้ารหัส' : null),
+                decoration: InputDecoration(labelText: 'รหัสผ่าน', helperText: confirm ? 'เว้นว่าง = ไม่ล็อกไฟล์ ใครก็เปิดได้' : null),
                 validator: (v) => !confirm && (v == null || v.isEmpty) ? 'กรุณากรอก' : null,
               ),
               if (confirm) ...[

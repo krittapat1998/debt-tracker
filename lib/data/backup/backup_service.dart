@@ -55,7 +55,7 @@ class BackupService {
     try {
       root = (jsonDecode(content) as Map).cast<String, Object?>();
     } catch (_) {
-      throw BackupException('ไฟล์ไม่ใช่ JSON ที่ถูกต้อง');
+      throw BackupException('เปิดไฟล์นี้ไม่ได้ ไม่ใช่ไฟล์สำรองข้อมูล หรือไฟล์เสียหาย');
     }
     if (root['format'] == encryptedFormat) {
       if (password == null || password.isEmpty) throw BackupException('ไฟล์นี้เข้ารหัสไว้ กรุณาใส่รหัสผ่าน');
