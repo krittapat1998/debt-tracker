@@ -30,6 +30,14 @@ void main() {
       expect(rows.last.balance, 0);
     });
 
+    test('principalForPayment undoes the installment formula, reducing and flat', () {
+      expect(LoanMath.principalForPayment(8884.88, 12, 12), closeTo(100000, 0.1));
+      expect(LoanMath.principalForPayment(1000, 0, 12), 12000);
+      final flat = LoanMath.flatMonthlyPayment(60000, 15, 24);
+      expect(LoanMath.principalForPayment(flat, 15, 24, flat: true), closeTo(60000, 0.001));
+      expect(LoanMath.principalForPayment(0, 25, 11), 0);
+    });
+
     test('monthsToPayoff returns null when payment does not cover interest', () {
       expect(LoanMath.monthsToPayoff(100000, 0.01, 1000), isNull);
       expect(LoanMath.monthsToPayoff(100000, 0.01, 8884.88), 12);

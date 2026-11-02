@@ -15,7 +15,8 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/form_fields.dart';
 
-/// Quick payment entry: date / account / target / amount / type.
+/// Quick payment entry: date / account / target / amount / type. With
+/// [existing] it corrects a recorded payment instead.
 class PaymentFormScreen extends ConsumerStatefulWidget {
   const PaymentFormScreen({
     super.key,
@@ -24,8 +25,10 @@ class PaymentFormScreen extends ConsumerStatefulWidget {
     this.type,
     this.amount,
     this.prepaymentMode,
+    this.existing,
   });
 
+  final Payment? existing;
   final String? accountId;
   final String? planId;
   final PaymentType? type;
@@ -65,6 +68,24 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
   void _init(PortfolioSummary s) {
     if (_initialized) return;
     _initialized = true;
+    final e = widget.existing;
+    if (e != null) {
+      _accountId = e.accountId;
+      _target = e.planId != null
+          ? 'plan:${e.planId}'
+          : e.creditLineId != null
+              ? 'line:${e.creditLineId}'
+              : null;
+      _type = e.type;
+      _mode = e.prepaymentMode ?? PrepaymentMode.reduceTerm;
+      _date = e.date;
+      _amount.text = amountToField(e.amount);
+      _amountTouched = true;
+      _note.text = e.note ?? '';
+      // Nothing was taken off the balance when it was recorded.
+      if (e.planId == null && e.creditLineId != null) _included = e.lineBalanceApplied < 0.005;
+      return;
+    }
     final a = (widget.accountId != null ? s.byId(widget.accountId!) : null) ?? s.nextDue ?? s.accounts.first;
     _accountId = a.account.id;
     _target = widget.planId != null ? 'plan:${widget.planId}' : _defaultTarget(a);
@@ -78,6 +99,25 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
     }
   }
 
+  /// [a] as it was before the edited payment: its amount is back on the
+  /// balance and off the statement, so the preview does not count it twice.
+  AccountSummary _withoutEdited(AccountSummary a) {
+    final e = widget.existing;
+    if (e == null || e.accountId != a.account.id) return a;
+    return AccountSummary(
+      account: a.account,
+      lines: [
+        for (final l in a.lines)
+          l.id == e.creditLineId && e.planId == null ? l.copyWith(balance: l.balance + e.lineBalanceApplied) : l,
+      ],
+      plans: a.plans,
+      payments: [for (final p in a.payments) if (p.id != e.id) p],
+      spendings: a.spendings,
+      recurring: a.recurring,
+      today: a.today,
+    );
+  }
+
   String? _defaultTarget(AccountSummary a) {
     if (a.lines.isNotEmpty) return 'line:${a.lines.first.id}';
     final plans = a.activePlans;
@@ -87,8 +127,13 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
   InstallmentState? _plan(AccountSummary a) {
     if (_target == null || !_target!.startsWith('plan:')) return null;
     final id = _target!.substring(5);
+    final e = widget.existing;
     for (final p in a.plans) {
-      if (p.plan.id == id) return p;
+      if (p.plan.id != id) continue;
+      // The preview of an edited payment is against the plan without it.
+      return e == null || e.planId != id
+          ? p
+          : InstallmentEngine.replay(p.plan, [for (final x in a.payments) if (x.id != e.id) x], asOf: DateTime.now());
     }
     return null;
   }
@@ -149,27 +194,32 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
     final plan = _plan(a);
     final line = _line(a);
     final skip = _skipBalance(line);
-    await ref.read(ledgerProvider).recordPayment(
-          Payment(
-            id: newId(),
-            accountId: a.account.id,
-            creditLineId: line?.id ?? plan?.plan.creditLineId,
-            planId: plan?.plan.id,
-            date: _date,
-            amount: parseAmount(_amount.text)!,
-            type: _type,
-            prepaymentMode: _type == PaymentType.extra && plan != null ? _mode : null,
-            note: _note.text.trim().isEmpty ? null : _note.text.trim(),
-            createdAt: DateTime.now(),
-          ),
-          alreadyInBalance: skip,
-        );
+    final e = widget.existing;
+    final payment = Payment(
+      id: e?.id ?? newId(),
+      accountId: a.account.id,
+      creditLineId: line?.id ?? plan?.plan.creditLineId,
+      planId: plan?.plan.id,
+      date: _date,
+      amount: parseAmount(_amount.text)!,
+      type: _type,
+      prepaymentMode: _type == PaymentType.extra && plan != null ? _mode : null,
+      note: _note.text.trim().isEmpty ? null : _note.text.trim(),
+      source: e?.source ?? PaymentSource.manual,
+      createdAt: e?.createdAt ?? DateTime.now(),
+    );
+    final ledger = ref.read(ledgerProvider);
+    if (e == null) {
+      await ledger.recordPayment(payment, alreadyInBalance: skip);
+    } else {
+      await ledger.updatePayment(payment, alreadyInBalance: skip);
+    }
     ref.refreshData();
     if (!mounted) return;
     Navigator.pop(context);
     showSnack(
       context,
-      'บันทึกการจ่าย ${fmtMoney(parseAmount(_amount.text)!)} แล้ว'
+      '${e == null ? 'บันทึกการจ่าย' : 'แก้ไขการจ่าย'} ${fmtMoney(payment.amount)} แล้ว'
       '${skip ? ' · ${a.account.type.revolvingLabel}หักการจ่ายนี้อยู่แล้ว ไม่หักซ้ำ' : ''}',
     );
   }
@@ -178,14 +228,15 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
   Widget build(BuildContext context) {
     final portfolio = ref.watch(portfolioProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('บันทึกการจ่ายเงิน')),
+      appBar: AppBar(title: Text(widget.existing == null ? 'บันทึกการจ่ายเงิน' : 'แก้ไขการจ่าย')),
       body: AsyncBody(
         value: portfolio,
         builder: (s) {
           if (s.isEmpty) return const EmptyState(icon: Icons.credit_card_off, title: 'ยังไม่มีบัตร/สินเชื่อ');
           _init(s);
-          final a = s.byId(_accountId!) ?? s.accounts.first;
-          final types = _allowedTypes(a);
+          final a = _withoutEdited(s.byId(_accountId!) ?? s.accounts.first);
+          // An edited payment keeps its type even where it is no longer offered.
+          final types = {..._allowedTypes(a), if (_type == widget.existing?.type) _type}.toList();
           if (!types.contains(_type)) _type = types.first;
           final plan = _plan(a);
           final line = _line(a);
@@ -230,8 +281,9 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
                   items: [
                     for (final l in a.lines)
                       DropdownMenuItem(value: 'line:${l.id}', child: Text('${l.name} (คงค้าง ${fmtMoney(l.balance)})')),
-                    for (final p in a.activePlans)
-                      DropdownMenuItem(value: 'plan:${p.plan.id}', child: Text('ผ่อน: ${p.plan.name}')),
+                    for (final p in a.plans)
+                      if (!p.isClosed || 'plan:${p.plan.id}' == _target)
+                        DropdownMenuItem(value: 'plan:${p.plan.id}', child: Text('ผ่อน: ${p.plan.name}')),
                   ],
                   onChanged: (v) => setState(() {
                     _target = v;
@@ -381,11 +433,20 @@ class _ImpactPreview extends StatelessWidget {
       } else {
         final next = p.nextRow;
         if (next != null) {
+          final due = next.dueDate;
           rows.addAll([
-            InfoRow('งวดที่', '${next.number}'),
+            InfoRow('งวดที่', due == null ? '${next.number}' : '${next.number} · ครบกำหนด ${fmtDate(due)}'),
             InfoRow('ตัดดอกเบี้ย', fmtMoney(next.interest)),
             InfoRow('ตัดเงินต้น', fmtMoney(amount - next.interest)),
           ]);
+          // Paying an installment months ahead usually means it was already
+          // counted in the plan's "จ่ายไปแล้ว".
+          if (type == PaymentType.installment && due != null && due.isAfter(date.add(const Duration(days: 31)))) {
+            rows.add(Text(
+              'งวดที่ ${next.number} ยังไม่ถึงกำหนดอีกนาน ถ้าเงินนี้คืองวดที่นับไว้ใน "จ่ายไปแล้ว" ของรายการผ่อน จะนับซ้ำ',
+              style: TextStyle(color: cs.warning),
+            ));
+          }
         }
       }
     } else if (line != null) {

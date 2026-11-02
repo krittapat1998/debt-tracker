@@ -132,6 +132,10 @@ class SqlitePaymentRepository implements PaymentRepository {
       conflictAlgorithm: ConflictAlgorithm.replace);
 
   @override
+  Future<void> update(Payment payment) =>
+      _db.db.update('payments', payment.toMap(), where: 'id = ?', whereArgs: [payment.id]);
+
+  @override
   Future<void> delete(String id) =>
       _db.db.delete('payments', where: 'id = ?', whereArgs: [id]);
 }

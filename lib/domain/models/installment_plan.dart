@@ -84,6 +84,16 @@ class InstallmentPlan {
   DateTime dueDateOf(int installmentNumber) =>
       addMonths(startDate, installmentNumber - 1, anchorDay: anchorDay ?? startDate.day);
 
+  /// How many installments fall due on or before [day].
+  int dueCountBy(DateTime day) {
+    final d = dateOnly(day);
+    var n = 0;
+    while (n < termMonths && !dueDateOf(n + 1).isAfter(d)) {
+      n++;
+    }
+    return n;
+  }
+
   InstallmentPlan copyWith({DateTime? startDate, int? anchorDay, int? postedThrough}) => InstallmentPlan(
         id: id,
         accountId: accountId,

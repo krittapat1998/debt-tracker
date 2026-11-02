@@ -6,6 +6,7 @@ import 'package:debt_tracker/data/repositories/repositories.dart';
 import 'package:debt_tracker/data/services/ledger_service.dart';
 import 'package:debt_tracker/data/services/settings_service.dart';
 import 'package:debt_tracker/data/sources/sms/sms_parser_config.dart';
+import 'package:debt_tracker/domain/finance/loan_math.dart';
 import 'package:debt_tracker/domain/finance/portfolio.dart';
 import 'package:debt_tracker/domain/models/account.dart';
 import 'package:debt_tracker/domain/models/credit_line.dart';
@@ -51,6 +52,12 @@ class _RecordingLedger implements LedgerService {
   final savedPlans = <InstallmentPlan>[];
   final billingDays = <(String, int)>[];
   final savedAccounts = <Account>[];
+  final updatedPayments = <(Payment, bool)>[];
+  @override
+  Future<Payment> updatePayment(Payment p, {required bool alreadyInBalance}) async {
+    updatedPayments.add((p, alreadyInBalance));
+    return p;
+  }
   @override
   Future<void> saveAccount(Account account, List<CreditLine> creditLines) async => savedAccounts.add(account);
   @override
@@ -548,6 +555,62 @@ void main() {
     expect(container.read(themeChoiceProvider), ThemeChoice.blue);
     expect(await tester.runAsync(() => container.read(settingsServiceProvider).themeChoice()), ThemeChoice.blue);
     expect(themeForCard(AppTheme.light(), const Color(0xFF212121)).colorScheme.onSurface, Colors.white);
+  });
+
+  testWidgets('plan form: principal from the installment, and a check of what counts as paid', (tester) async {
+    await pump(tester, PlanFormScreen(account: portfolio.byId('a2')!));
+    await tester.enterText(find.widgetWithText(TextFormField, 'ชื่อรายการ'), 'UOB Express');
+    await tester.enterText(find.widgetWithText(TextFormField, 'ดอกเบี้ยต่อปี'), '25');
+    await tester.enterText(find.widgetWithText(TextFormField, 'จำนวนงวด'), '11');
+    await tester.tap(find.text('ธนาคารกำหนดค่าผ่อนต่อเดือนมาแล้ว'));
+    await settle(tester);
+    await tester.enterText(find.widgetWithText(TextFormField, 'ค่าผ่อนต่อเดือน'), '3000');
+    await settle(tester);
+    await tester.tap(find.text('ไม่รู้เงินต้น? คำนวณจากค่าผ่อนนี้'));
+    await settle(tester);
+    final principal = LoanMath.round2(LoanMath.principalForPayment(3000, 25, 11));
+    expect(find.widgetWithText(TextFormField, amountToField(principal)), findsOneWidget);
+
+    // Paid separately: the first due date is next month, so nothing is due yet.
+    await tester.scrollUntilVisible(find.text('ค่างวดรวมอยู่ในยอดเรียกเก็บของบัตรแล้ว'), 300,
+        scrollable: find.byType(Scrollable).first);
+    // Clear of the snack bar the principal button showed.
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -300));
+    await settle(tester);
+    await tester.tap(find.text('ค่างวดรวมอยู่ในยอดเรียกเก็บของบัตรแล้ว'));
+    await settle(tester);
+    await tester.enterText(find.widgetWithText(TextFormField, 'จ่ายไปแล้วกี่งวด (ก่อนเริ่มใช้แอพ)'), '2');
+    await settle(tester);
+    expect(find.textContaining('นับว่าจ่ายแล้วเกินงวดที่ครบกำหนด 2 งวด'), findsOneWidget);
+    await tester.tap(find.text('ใส่ 0'));
+    await settle(tester);
+    expect(find.textContaining('นับว่าจ่ายแล้วเกิน'), findsNothing);
+  });
+
+  testWidgets('payment form edits a recorded payment', (tester) async {
+    final ledger = _RecordingLedger();
+    final x2 = portfolio.byId('a3')!.payments.firstWhere((p) => p.id == 'x2');
+    await pump(tester, PaymentFormScreen(existing: x2), ledger: ledger);
+    expect(find.text('แก้ไขการจ่าย'), findsOneWidget);
+    // Previewed against the plan without this payment: it is the next installment again.
+    expect(find.textContaining('ครบกำหนด'), findsWidgets);
+    await tester.enterText(find.widgetWithText(TextFormField, 'จำนวนเงิน'), '2100');
+    await tester.scrollUntilVisible(find.text('บันทึก'), 300, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('บันทึก'));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await settle(tester);
+    final (saved, _) = ledger.updatedPayments.single;
+    expect((saved.id, saved.planId, saved.type, saved.amount, saved.createdAt),
+        ('x2', 'p3', PaymentType.installment, 2100, x2.createdAt));
+  });
+
+  testWidgets('editing a card payment previews from the balance before it', (tester) async {
+    final a2 = portfolio.byId('a2')!;
+    final x1 = a2.payments.firstWhere((p) => p.id == 'x1');
+    final l2 = a2.lines.firstWhere((l) => l.id == 'l2');
+    await pump(tester, PaymentFormScreen(existing: x1), ledger: _RecordingLedger());
+    // Same amount: the balance comes back to what it is now, not 840 lower.
+    expect(find.text('${fmtMoney(l2.balance + 840)} → ${fmtMoney(l2.balance)}'), findsOneWidget);
   });
 
   testWidgets('plan form: new, edit flat plan', (tester) async {

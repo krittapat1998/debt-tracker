@@ -76,6 +76,40 @@ void main() {
     expect(await payments.getAll(), isEmpty);
   });
 
+  test('editing a payment gives back the old amount and takes off the new one', () async {
+    Payment edit(Payment p, double amount, {PaymentType type = PaymentType.full}) => Payment(id: p.id, accountId: 'a',
+        creditLineId: 'l', date: DateTime(2026, 10, 26), amount: amount, type: type, createdAt: p.createdAt);
+    final p = await ledger.recordPayment(payment(3000));
+    final edited = await ledger.updatePayment(edit(p, 1200), alreadyInBalance: false);
+    expect((await lines.getById('l'))!.balance, 8800);
+    expect(edited.lineBalanceApplied, 1200);
+    final stored = (await payments.getById(p.id))!;
+    expect((stored.amount, stored.type, stored.date), (1200, PaymentType.full, DateTime(2026, 10, 26)));
+
+    // "The bank balance already has it": nothing is taken off any more.
+    await ledger.updatePayment(stored, alreadyInBalance: true);
+    expect((await lines.getById('l'))!.balance, 10000);
+    expect((await payments.getById(p.id))!.lineBalanceApplied, 0);
+
+    // A balance typed in from the bank after the payment is left alone.
+    final again = await ledger.updatePayment(stored, alreadyInBalance: false);
+    expect((await lines.getById('l'))!.balance, 8800);
+    now = now.add(const Duration(days: 1));
+    await ledger.setLineBalance('l', 9500);
+    await ledger.updatePayment(edit(again, 500), alreadyInBalance: false);
+    expect((await lines.getById('l'))!.balance, 9500);
+  });
+
+  test('moving a payment onto an installment plan stops it reducing the card balance', () async {
+    await ledger.savePlan(InstallmentPlan(id: 'plan', accountId: 'a', name: 'ผ่อนทีวี', principal: 12000, annualRate: 0,
+        interestMethod: InterestMethod.reducing, termMonths: 12, startDate: DateTime(2026, 10, 25), createdAt: now));
+    final p = await ledger.recordPayment(payment(2000));
+    await ledger.updatePayment(Payment(id: p.id, accountId: 'a', planId: 'plan', date: p.date, amount: 2000,
+        type: PaymentType.installment, createdAt: p.createdAt), alreadyInBalance: false);
+    expect((await lines.getById('l'))!.balance, 10000);
+    expect((await payments.getById(p.id))!.planId, 'plan');
+  });
+
   Spending spending(double amount, {String? note}) => Spending(
         id: 's${DateTime.now().microsecondsSinceEpoch}',
         accountId: 'a',
