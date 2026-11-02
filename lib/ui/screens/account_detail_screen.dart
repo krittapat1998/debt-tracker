@@ -914,9 +914,14 @@ class SpendingTile extends ConsumerWidget {
         if (l.id == s.creditLineId) lineName = l.name;
       }
     }
+    // Spent after the latest cutoff: the bank bills it on the next statement.
+    final cutoff = summary.lastCutoff;
+    final next = summary.nextCutoff;
+    final pending = cutoff != null && s.date.isAfter(cutoff);
     final details = [
       if (showAccount) summary.account.name,
       ?lineName,
+      if (pending) next == null ? 'รอเรียกเก็บรอบหน้า' : 'รอเรียกเก็บรอบ ${fmtDate(next)}',
       if (s.source != PaymentSource.manual) 'จาก ${s.source.label}',
       if (s.creditLineId != null && s.lineBalanceApplied < 0.005) 'ไม่ได้บวกยอด (รวมอยู่แล้ว)',
     ];
