@@ -15,11 +15,15 @@ class DebtChart extends StatelessWidget {
     required this.baseline,
     required this.start,
     this.stretch,
+    this.planColor,
     this.maxMonths = 360,
   });
   final List<double> plan;
   final List<double> baseline;
   final List<double>? stretch;
+
+  /// Color of [plan]; the theme's primary when null.
+  final Color? planColor;
   final DateTime start;
   final int maxMonths;
 
@@ -37,7 +41,7 @@ class DebtChart extends StatelessWidget {
           stretch: stretch,
           start: start,
           maxMonths: maxMonths,
-          planColor: cs.primary,
+          planColor: planColor ?? cs.primary,
           stretchColor: cs.tertiary,
           baseColor: cs.outline,
           gridColor: cs.outlineVariant,

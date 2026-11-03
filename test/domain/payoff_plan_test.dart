@@ -53,6 +53,26 @@ void main() {
     expect(plan.months!, lessThan(12));
   });
 
+  test('a monthly total pays what is due and prepays the rest', () {
+    final pay = LoanMath.amortizedPayment(30000, 0.01, 24);
+    final debts = [
+      PayoffDebt(id: 'loan', name: 'ผ่อน', balance: 30000, annualRate: 12, payment: pay),
+      const PayoffDebt(id: 'card', name: 'บัตร', balance: 20000, annualRate: 16, minimumRatio: 0.08),
+    ];
+    final due = PayoffPlanner.dueNow(debts, start: start);
+    expect(due, closeTo(pay + (20000 + 20000 * 16 / 1200) * 0.08, 0.01));
+
+    final within = PayoffPlanner.planWithin(debts, start: start, budget: 15000)!;
+    final same = PayoffPlanner.plan(debts, start: start, extra: 15000 - due);
+    expect(within.firstMonthPayment, closeTo(15000, 0.01));
+    expect(within.months, same.months);
+    expect(within.totalInterest, closeTo(same.totalInterest, 0.01));
+
+    // Exactly what is due still works; anything less does not cover it.
+    expect(PayoffPlanner.planWithin(debts, start: start, budget: due), isNotNull);
+    expect(PayoffPlanner.planWithin(debts, start: start, budget: due - 1), isNull);
+  });
+
   test('a minimum that never beats the interest never finishes', () {
     const debt = PayoffDebt(id: 'x', name: 'ผ่อนน้อยเกิน', balance: 100000, annualRate: 24, payment: 1000);
     final r = PayoffPlanner.baseline([debt], start: start);

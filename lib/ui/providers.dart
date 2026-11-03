@@ -122,8 +122,8 @@ final appVersionProvider = FutureProvider<String>((ref) async {
   return '${info.version} (${info.buildNumber})';
 });
 
-final payoffExtraProvider = FutureProvider<double>((ref) => ref.watch(settingsServiceProvider).payoffExtra());
-final payoffMaxProvider = FutureProvider<double>((ref) => ref.watch(settingsServiceProvider).payoffMax());
+final payoffBudgetProvider = FutureProvider<double>((ref) => ref.watch(settingsServiceProvider).payoffBudget());
+final payoffBudgetMaxProvider = FutureProvider<double>((ref) => ref.watch(settingsServiceProvider).payoffBudgetMax());
 
 final notificationPrefsProvider =
     FutureProvider<NotificationPrefs>((ref) => ref.watch(settingsServiceProvider).notificationPrefs());

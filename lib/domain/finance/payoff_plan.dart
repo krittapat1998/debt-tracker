@@ -107,6 +107,18 @@ class PayoffPlanner {
   static PayoffResult plan(List<PayoffDebt> debts, {required DateTime start, required double extra}) =>
       _run(debts, start: start, extra: extra, rollOver: true);
 
+  /// What the coming month asks for: card minimums plus installments.
+  static double dueNow(List<PayoffDebt> debts, {required DateTime start}) =>
+      baseline(debts, start: start).firstMonthPayment;
+
+  /// Paying [budget] a month in all (what is due, the rest as prepayment);
+  /// null when [budget] does not cover what is due.
+  static PayoffResult? planWithin(List<PayoffDebt> debts, {required DateTime start, required double budget}) {
+    final due = dueNow(debts, start: start);
+    if (budget < due - 0.005) return null;
+    return plan(debts, start: start, extra: math.max(0, budget - due));
+  }
+
   static double _minimum(PayoffDebt d, double balance) {
     if (d.minimumRatio > 0) return math.min(balance, math.max(d.minimumRatio * balance, PayoffDebt.minimumFloor));
     return math.min(balance, d.payment);

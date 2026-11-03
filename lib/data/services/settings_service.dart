@@ -45,8 +45,10 @@ class SettingsService {
   static const _smsSeenKeys = 'sms_seen_keys';
   static const _theme = 'theme';
   static const _appLock = 'app_lock';
-  static const _payoffExtra = 'payoff_extra';
-  static const _payoffMax = 'payoff_max';
+  // Monthly totals. The older payoff_extra / payoff_max keys held amounts on
+  // top of what is due, so they are left unread.
+  static const _payoffBudget = 'payoff_budget';
+  static const _payoffBudgetMax = 'payoff_budget_max';
 
   Future<NotificationPrefs> notificationPrefs() async => NotificationPrefs(
         enabled: (await _repo.get(_notifEnabled)) != '0',
@@ -74,15 +76,16 @@ class SettingsService {
 
   Future<void> setAppLockEnabled(bool v) => _repo.set(_appLock, v ? '1' : '0');
 
-  /// What the user can put toward debts each month on top of what is due.
-  Future<double> payoffExtra() async => double.tryParse(await _repo.get(_payoffExtra) ?? '') ?? 0;
+  /// What the user can comfortably pay toward all debts each month, minimums
+  /// and installments included.
+  Future<double> payoffBudget() async => double.tryParse(await _repo.get(_payoffBudget) ?? '') ?? 0;
 
-  Future<void> setPayoffExtra(double v) => _repo.set(_payoffExtra, '$v');
+  Future<void> setPayoffBudget(double v) => _repo.set(_payoffBudget, '$v');
 
-  /// The most the user could put toward debts each month, to compare.
-  Future<double> payoffMax() async => double.tryParse(await _repo.get(_payoffMax) ?? '') ?? 0;
+  /// The most the user could pay toward all debts each month, to compare.
+  Future<double> payoffBudgetMax() async => double.tryParse(await _repo.get(_payoffBudgetMax) ?? '') ?? 0;
 
-  Future<void> setPayoffMax(double v) => _repo.set(_payoffMax, '$v');
+  Future<void> setPayoffBudgetMax(double v) => _repo.set(_payoffBudgetMax, '$v');
 
   Future<DateTime?> lastSmsScan() async =>
       DateTime.tryParse(await _repo.get(_smsLastScan) ?? '');
