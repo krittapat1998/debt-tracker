@@ -7,6 +7,7 @@ import 'package:debt_tracker/data/services/ledger_service.dart';
 import 'package:debt_tracker/data/services/settings_service.dart';
 import 'package:debt_tracker/data/sources/sms/sms_parser_config.dart';
 import 'package:debt_tracker/domain/finance/loan_math.dart';
+import 'package:debt_tracker/domain/finance/payoff_plan.dart';
 import 'package:debt_tracker/domain/finance/portfolio.dart';
 import 'package:debt_tracker/domain/models/account.dart';
 import 'package:debt_tracker/domain/models/credit_line.dart';
@@ -866,29 +867,39 @@ void main() {
     expect(find.text('UOB Preferred Platinum'), findsNothing);
   });
 
-  testWidgets('debt-free plan: a monthly extra brings the date closer and is remembered', (tester) async {
+  // What the sample asks for each month: card minimums plus installments.
+  double dueNow() => PayoffPlanner.dueNow(PayoffDebt.fromPortfolio(portfolio), start: portfolio.today);
+
+  testWidgets('debt-free plan: a monthly total above what is due brings the date closer and is remembered', (tester) async {
     final container = await pump(tester, const PayoffPlanScreen());
     expect(find.text('ปลดหนี้หมด'), findsOneWidget);
+    expect(find.text('${fmtMoney(dueNow())}/เดือน'), findsOneWidget);
     String date() => tester.widget<Text>(find.byWidgetPredicate(
         (w) => w is Text && (w.data ?? '').contains(RegExp(r'^\S+ 25\d\d$')))).data!;
     final before = date();
-    await tester.tap(find.text('+฿2,000'));
+    final budget = (dueNow() + 2000).ceilToDouble();
+    await tester.enterText(find.widgetWithText(TextFormField, 'จ่ายไหว/เดือน'), budget.toStringAsFixed(0));
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
     await settle(tester);
     expect(date(), isNot(before));
+    // The whole amount goes out each month; what is above the minimums is the prepayment.
+    expect(find.text(fmtMoney(budget)), findsOneWidget);
+    expect(find.textContaining('+ โปะ ${fmtMoney(budget - dueNow())}'), findsOneWidget);
     expect(find.text('ประหยัดดอกเบี้ย'), findsOneWidget);
     expect(find.textContaining('เร็วกว่าจ่ายแค่ขั้นต่ำ'), findsOneWidget);
     await tester.scrollUntilVisible(find.textContaining('โปะอันนี้ก่อน'), 300, scrollable: find.byType(Scrollable).first);
     // First Choice's 25.98% loan is the most expensive one that may be prepaid.
     expect(find.descendant(of: find.widgetWithText(ListTile, 'First Choice · สินเชื่อก้อน'), matching: find.textContaining('โปะอันนี้ก่อน')),
         findsOneWidget);
-    expect(await tester.runAsync(() => container.read(settingsServiceProvider).payoffExtra()), 2000);
+    expect(await tester.runAsync(() => container.read(settingsServiceProvider).payoffBudget()), budget);
   });
 
-  testWidgets('debt-free plan: comfortable and all-out amounts side by side', (tester) async {
+  testWidgets('debt-free plan: comfortable and all-out totals side by side', (tester) async {
     final container = await pump(tester, const PayoffPlanScreen());
-    await tester.enterText(find.widgetWithText(TextFormField, 'โปะที่ไหว/เดือน'), '1000');
-    await tester.enterText(find.widgetWithText(TextFormField, 'โปะเต็มที่/เดือน'), '5000');
+    final easy = (dueNow() + 1000).ceilToDouble();
+    final most = (dueNow() + 5000).ceilToDouble();
+    await tester.enterText(find.widgetWithText(TextFormField, 'จ่ายไหว/เดือน'), easy.toStringAsFixed(0));
+    await tester.enterText(find.widgetWithText(TextFormField, 'เต็มที่/เดือน'), most.toStringAsFixed(0));
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
     await settle(tester);
     expect(find.text('แบบที่ไหว · ปลดหนี้หมด'), findsOneWidget);
@@ -897,24 +908,53 @@ void main() {
     expect(find.textContaining('หมดเดือนเดียวกับแบบที่ไหว'), findsOneWidget);
     expect(find.text('ประหยัดกว่าแบบที่ไหว'), findsOneWidget);
     final settings = container.read(settingsServiceProvider);
-    expect(await tester.runAsync(() => settings.payoffMax()), 5000);
-    expect(await tester.runAsync(() => settings.payoffExtra()), 1000);
+    expect(await tester.runAsync(() => settings.payoffBudgetMax()), most);
+    expect(await tester.runAsync(() => settings.payoffBudget()), easy);
+  });
+
+  testWidgets('debt-free plan: a total below what is due says how much is missing', (tester) async {
+    await pump(tester, const PayoffPlanScreen());
+    await tester.enterText(find.widgetWithText(TextFormField, 'จ่ายไหว/เดือน'), '1000');
+    await tester.enterText(find.widgetWithText(TextFormField, 'เต็มที่/เดือน'), (dueNow() + 3000).ceil().toString());
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await settle(tester);
+    expect(find.text('ยังไม่พอจ่ายขั้นต่ำ'), findsOneWidget);
+    expect(find.textContaining('ขาดอีก ${fmtMoney(dueNow() - 1000)}'), findsOneWidget);
+    expect(find.text('ถ้าจ่ายครบขั้นต่ำทุกเดือน'), findsOneWidget);
+    // The all-out total covers it, so the chart and the order follow that one.
+    expect(find.text('แบบเต็มที่ · ปลดหนี้หมด'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('ลำดับที่จะหมด (แบบเต็มที่)'), 300, scrollable: find.byType(Scrollable).first);
+  });
+
+  testWidgets('dashboard: a saved monthly total below what is due is called out', (tester) async {
+    final container = await pump(tester, const DashboardScreen());
+    expect(find.textContaining('ปลดหนี้หมดประมาณ'), findsOneWidget);
+    await tester.runAsync(() => container.read(settingsServiceProvider).setPayoffBudget(1000));
+    container.invalidate(payoffBudgetProvider);
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await settle(tester);
+    expect(find.textContaining('จ่ายหนี้ได้เดือนละ ฿1,000 ยังไม่พอขั้นต่ำ'), findsOneWidget);
+    await tester.runAsync(() => container.read(settingsServiceProvider).setPayoffBudget((dueNow() + 2000).ceilToDouble()));
+    container.invalidate(payoffBudgetProvider);
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await settle(tester);
+    expect(find.textContaining('(จ่ายหนี้เดือนละ ${fmtMoneyCompact((dueNow() + 2000).ceilToDouble())})'), findsOneWidget);
   });
 
   testWidgets('debt-free plan: a tap outside the amount closes the number pad and keeps the amount', (tester) async {
     final container = await pump(tester, const PayoffPlanScreen());
-    final field = find.widgetWithText(TextFormField, 'โปะที่ไหว/เดือน');
+    final field = find.widgetWithText(TextFormField, 'จ่ายไหว/เดือน');
     await tester.tap(field);
     await tester.pump();
     expect(tester.testTextInput.isVisible, isTrue);
     await tester.enterText(field, '10000');
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
     await settle(tester);
-    await tester.tap(find.text('ปลดหนี้หมด'));
+    await tester.tap(find.text('ขั้นต่ำบัตร + ค่างวด ประมาณ'));
     await tester.pump();
     expect(tester.testTextInput.isVisible, isFalse);
     expect(find.text('10000'), findsOneWidget);
-    expect(await tester.runAsync(() => container.read(settingsServiceProvider).payoffExtra()), 10000);
+    expect(await tester.runAsync(() => container.read(settingsServiceProvider).payoffBudget()), 10000);
   });
 
   testWidgets('settings show the app version and who made it', (tester) async {

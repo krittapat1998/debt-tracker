@@ -134,8 +134,12 @@ class _SummaryCard extends ConsumerWidget {
     final t = Theme.of(context).textTheme;
     final due = s.monthlyDue;
     final debts = PayoffDebt.fromPortfolio(s);
-    final extra = ref.watch(payoffExtraProvider).value ?? 0;
-    final debtFree = debts.isEmpty ? null : PayoffPlanner.plan(debts, start: s.today, extra: extra).months;
+    final budget = ref.watch(payoffBudgetProvider).value ?? 0;
+    final dueNow = debts.isEmpty ? 0.0 : PayoffPlanner.dueNow(debts, start: s.today);
+    final short = budget > 0 && budget < dueNow - 0.005;
+    final debtFree = debts.isEmpty || short
+        ? null
+        : PayoffPlanner.plan(debts, start: s.today, extra: budget > dueNow ? budget - dueNow : 0).months;
     return Card(
       color: cs.primaryContainer,
       child: Padding(
@@ -183,10 +187,12 @@ class _SummaryCard extends ConsumerWidget {
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        debtFree == null
-                            ? 'ตามที่จ่ายอยู่ หนี้ยังไม่หมด · ดูแผนปลดหนี้'
-                            : 'ปลดหนี้หมดประมาณ ${fmtMonthYear(addMonths(s.today, debtFree))}'
-                                '${extra > 0 ? ' (โปะเพิ่มเดือนละ ${fmtMoneyCompact(extra)})' : ''}',
+                        short
+                            ? 'จ่ายหนี้ได้เดือนละ ${fmtMoneyCompact(budget)} ยังไม่พอขั้นต่ำ ${fmtMoneyCompact(dueNow)} · ดูแผนปลดหนี้'
+                            : debtFree == null
+                                ? 'ตามที่จ่ายอยู่ หนี้ยังไม่หมด · ดูแผนปลดหนี้'
+                                : 'ปลดหนี้หมดประมาณ ${fmtMonthYear(addMonths(s.today, debtFree))}'
+                                    '${budget > 0 ? ' (จ่ายหนี้เดือนละ ${fmtMoneyCompact(budget)})' : ''}',
                         style: t.bodyMedium?.copyWith(color: cs.onPrimaryContainer, fontWeight: FontWeight.w600),
                       ),
                     ),

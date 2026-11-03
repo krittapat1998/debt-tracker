@@ -10,9 +10,10 @@ import '../widgets/common.dart';
 import '../widgets/debt_chart.dart';
 import '../widgets/form_fields.dart';
 
-/// "If I put X more toward my debts each month, when am I debt-free?" —
-/// every balance at once, extra money going to the most expensive first.
-/// Two amounts can be compared: what is comfortable and the most one can.
+/// "If I put X a month toward my debts, when am I debt-free?" — every
+/// balance at once, money above what is due going to the most expensive
+/// first. Two monthly totals can be compared: what is comfortable and the
+/// most one can.
 class PayoffPlanScreen extends ConsumerStatefulWidget {
   const PayoffPlanScreen({super.key});
 
@@ -21,41 +22,38 @@ class PayoffPlanScreen extends ConsumerStatefulWidget {
 }
 
 class _PayoffPlanScreenState extends ConsumerState<PayoffPlanScreen> {
-  final _extra = TextEditingController();
+  final _budget = TextEditingController();
   final _max = TextEditingController();
   bool _loaded = false;
   bool _loadedMax = false;
 
-  static const _quick = [1000.0, 2000.0, 5000.0];
-
   @override
   void dispose() {
-    _extra.dispose();
+    _budget.dispose();
     _max.dispose();
     super.dispose();
   }
 
-  Future<void> _setExtra(double v, {bool fillField = false}) async {
-    if (fillField) _extra.text = v == 0 ? '' : amountToField(v);
+  Future<void> _setBudget(double v) async {
     setState(() {});
-    await ref.read(settingsServiceProvider).setPayoffExtra(v);
-    ref.invalidate(payoffExtraProvider);
+    await ref.read(settingsServiceProvider).setPayoffBudget(v);
+    ref.invalidate(payoffBudgetProvider);
   }
 
   Future<void> _setMax(double v) async {
     setState(() {});
-    await ref.read(settingsServiceProvider).setPayoffMax(v);
-    ref.invalidate(payoffMaxProvider);
+    await ref.read(settingsServiceProvider).setPayoffBudgetMax(v);
+    ref.invalidate(payoffBudgetMaxProvider);
   }
 
   @override
   Widget build(BuildContext context) {
-    final saved = ref.watch(payoffExtraProvider).value;
+    final saved = ref.watch(payoffBudgetProvider).value;
     if (!_loaded && saved != null) {
       _loaded = true;
-      if (saved > 0) _extra.text = amountToField(saved);
+      if (saved > 0) _budget.text = amountToField(saved);
     }
-    final savedMax = ref.watch(payoffMaxProvider).value;
+    final savedMax = ref.watch(payoffBudgetMaxProvider).value;
     if (!_loadedMax && savedMax != null) {
       _loadedMax = true;
       if (savedMax > 0) _max.text = amountToField(savedMax);
@@ -71,14 +69,35 @@ class _PayoffPlanScreenState extends ConsumerState<PayoffPlanScreen> {
           if (debts.isEmpty) {
             return const EmptyState(icon: Icons.celebration_outlined, title: 'ไม่มีหนี้ค้างแล้ว');
           }
-          final extra = parseAmount(_extra.text) ?? 0;
+          final budget = parseAmount(_budget.text) ?? 0;
           final most = parseAmount(_max.text) ?? 0;
           final base = PayoffPlanner.baseline(debts, start: s.today);
-          final plan = PayoffPlanner.plan(debts, start: s.today, extra: extra);
-          // The all-out plan, when it differs from the comfortable one.
-          final stretch = most > extra + 0.005 ? PayoffPlanner.plan(debts, start: s.today, extra: most) : null;
+          final due = base.firstMonthPayment;
+          // Nothing typed yet: keep paying what is due now.
+          final plan = budget > 0
+              ? PayoffPlanner.planWithin(debts, start: s.today, budget: budget)
+              : PayoffPlanner.plan(debts, start: s.today, extra: 0);
+          final showMost = most > 0.005 && most > budget + 0.005;
+          final stretch = showMost ? PayoffPlanner.planWithin(debts, start: s.today, budget: most) : null;
+
+          // The scenario the chart and the order follow: the comfortable one
+          // when it covers what is due, else the all-out one, else minimums.
+          final lead = plan ?? stretch ?? base;
+          final leadLabel = plan != null
+              ? (stretch != null ? 'แบบที่ไหว' : 'ตามแผน')
+              : stretch != null
+                  ? 'แบบเต็มที่'
+                  : 'จ่ายแค่ขั้นต่ำและค่างวด';
+          final leadExtra = identical(lead, plan)
+              ? budget - due
+              : identical(lead, stretch)
+                  ? most - due
+                  : 0.0;
+          final second = plan != null ? stretch : null;
+          // Same color as the card it follows.
+          final leadColor = identical(lead, stretch) ? cs.tertiary : cs.primary;
           final order = [...debts]..sort((a, b) =>
-              (plan.paidOff[a.id] ?? 1 << 20).compareTo(plan.paidOff[b.id] ?? 1 << 20));
+              (lead.paidOff[a.id] ?? 1 << 20).compareTo(lead.paidOff[b.id] ?? 1 << 20));
           // Where the extra goes first: the most expensive balance not in lock-in.
           final open = [
             for (final d in debts)
@@ -98,16 +117,16 @@ class _PayoffPlanScreenState extends ConsumerState<PayoffPlanScreen> {
                   children: [
                     Expanded(
                       child: AmountField(
-                        controller: _extra,
-                        label: 'โปะที่ไหว/เดือน',
-                        onChanged: (v) => _setExtra(parseAmount(v) ?? 0),
+                        controller: _budget,
+                        label: 'จ่ายไหว/เดือน',
+                        onChanged: (v) => _setBudget(parseAmount(v) ?? 0),
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: AmountField(
                         controller: _max,
-                        label: 'โปะเต็มที่/เดือน',
+                        label: 'เต็มที่/เดือน',
                         onChanged: (v) => _setMax(parseAmount(v) ?? 0),
                       ),
                     ),
@@ -117,65 +136,69 @@ class _PayoffPlanScreenState extends ConsumerState<PayoffPlanScreen> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(28, 4, 16, 0),
                 child: Text(
-                  'นอกจากขั้นต่ำบัตรและค่างวดที่จ่ายอยู่แล้ว · ใส่ช่องเต็มที่ไว้เทียบว่าถ้าโปะสุดตัวจะหมดเร็วขึ้นแค่ไหน',
+                  'เงินทั้งหมดที่เอามาจ่ายหนี้ได้ต่อเดือน รวมขั้นต่ำบัตรและค่างวดแล้ว · '
+                  'ใส่ช่องเต็มที่ไว้เทียบว่าถ้าจ่ายสุดตัวจะหมดเร็วขึ้นแค่ไหน',
                   style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Wrap(
-                  spacing: 8,
-                  children: [
-                    for (final q in _quick)
-                      ActionChip(label: Text('+${fmtMoneyCompact(q)}'), onPressed: () => _setExtra(q, fillField: true)),
-                  ],
-                ),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: InfoRow('ขั้นต่ำบัตร + ค่างวด ประมาณ', '${fmtMoney(due)}/เดือน'),
               ),
               _ResultCard(
-                title: stretch == null ? 'ปลดหนี้หมด' : 'แบบที่ไหว · ปลดหนี้หมด',
+                title: showMost ? 'แบบที่ไหว' : null,
                 today: s.today,
-                extra: extra,
+                budget: budget > 0 ? budget : due,
+                due: due,
                 plan: plan,
                 base: base,
               ),
-              if (stretch != null)
+              if (showMost)
                 _ResultCard(
-                  title: 'แบบเต็มที่ · ปลดหนี้หมด',
+                  title: 'แบบเต็มที่',
                   today: s.today,
-                  extra: most,
+                  budget: most,
+                  due: due,
                   plan: stretch,
                   base: base,
                   comparedTo: plan,
+                  allOut: true,
                 ),
               const SectionHeader('ยอดหนี้รวมลดลงแบบนี้'),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: DebtChart(plan: plan.balances, baseline: base.balances, stretch: stretch?.balances, start: s.today),
+                child: DebtChart(
+                  plan: lead.balances,
+                  baseline: base.balances,
+                  stretch: second?.balances,
+                  planColor: leadColor,
+                  start: s.today,
+                ),
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                 child: Wrap(
                   spacing: 16,
                   children: [
-                    _Legend(color: cs.primary, label: stretch == null ? 'ตามแผน' : 'แบบที่ไหว'),
-                    if (stretch != null) _Legend(color: cs.tertiary, label: 'แบบเต็มที่'),
-                    _Legend(color: cs.outline, label: 'จ่ายแค่ขั้นต่ำและค่างวด'),
+                    _Legend(color: leadColor, label: leadLabel),
+                    if (second != null) _Legend(color: cs.tertiary, label: 'แบบเต็มที่'),
+                    if (!identical(lead, base)) _Legend(color: cs.outline, label: 'จ่ายแค่ขั้นต่ำและค่างวด'),
                   ],
                 ),
               ),
-              SectionHeader(stretch == null ? 'ลำดับที่จะหมด' : 'ลำดับที่จะหมด (แบบที่ไหว)'),
+              SectionHeader(identical(lead, plan) && second == null ? 'ลำดับที่จะหมด' : 'ลำดับที่จะหมด ($leadLabel)'),
               for (final (i, d) in order.indexed)
                 ListTile(
                   leading: CircleAvatar(radius: 14, child: Text('${i + 1}', style: t.labelMedium)),
                   title: Text(d.name),
                   subtitle: Text([
-                    plan.paidOff[d.id] == null
+                    lead.paidOff[d.id] == null
                         ? 'ยังไม่หมด'
-                        : 'หมด ${fmtMonthYear(addMonths(s.today, plan.paidOff[d.id]!))}',
+                        : 'หมด ${fmtMonthYear(addMonths(s.today, lead.paidOff[d.id]!))}',
                     'ดอก ${fmtRate(d.annualRate)}/ปี',
                     if (d.lockedUntil != null && s.today.isBefore(d.lockedUntil!))
                       'โปะได้ตั้งแต่ ${fmtDate(d.lockedUntil!)}',
-                    if (extra > 0 && identical(d, target)) 'โปะอันนี้ก่อน',
+                    if (leadExtra > 0.005 && identical(d, target)) 'โปะอันนี้ก่อน',
                   ].join(' · ')),
                   trailing: Text(fmtMoney(d.balance)),
                 ),
@@ -183,8 +206,10 @@ class _PayoffPlanScreenState extends ConsumerState<PayoffPlanScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                 child: Text(
                   'เป็นการประมาณ: บัตรคิดขั้นต่ำตามสัดส่วนในบิลล่าสุด (ถ้าไม่มีใช้ 8% สำหรับบัตรเครดิต 5% สำหรับบัตรอื่น) '
-                  'ยังไม่รวมการใช้จ่ายใหม่และค่าปรับปิดก่อนกำหนด เงินที่โปะจะไปลงหนี้ที่ดอกแพงสุดก่อน '
-                  'พอหนี้ไหนหมด เงินที่เคยจ่ายก้อนนั้นจะไปโปะก้อนถัดไปต่อ',
+                  'ยังไม่รวมการใช้จ่ายใหม่และค่าปรับปิดก่อนกำหนด เงินที่เกินขั้นต่ำจะไปลงหนี้ที่ดอกแพงสุดก่อน '
+                  'พอหนี้ไหนหมด เงินที่เคยจ่ายก้อนนั้นจะไปโปะก้อนถัดไปต่อ '
+                  'ขั้นต่ำต่อเดือนนับทุกบัตรและทุกค่างวดของเดือนปกติ จึงอาจไม่เท่ากับ "ต้องจ่ายเดือนนี้" ในหน้าภาพรวม '
+                  'ที่นับเฉพาะบิลที่ครบกำหนดในเดือนนี้',
                   style: t.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                 ),
               ),
@@ -200,75 +225,114 @@ class _ResultCard extends StatelessWidget {
   const _ResultCard({
     required this.title,
     required this.today,
-    required this.extra,
+    required this.budget,
+    required this.due,
     required this.plan,
     required this.base,
     this.comparedTo,
+    this.allOut = false,
   });
-  final String title;
+
+  /// 'แบบที่ไหว' / 'แบบเต็มที่' when two cards are compared.
+  final String? title;
   final DateTime today;
-  final double extra;
-  final PayoffResult plan;
+
+  /// Paid toward debts every month, all included.
+  final double budget;
+
+  /// Card minimums plus installments this month.
+  final double due;
+
+  /// Null when [budget] does not cover [due].
+  final PayoffResult? plan;
   final PayoffResult base;
 
   /// The comfortable plan, when this card is the all-out one.
   final PayoffResult? comparedTo;
+  final bool allOut;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final t = Theme.of(context).textTheme;
-    final months = plan.months;
-    final sooner = months != null && base.months != null ? base.months! - months : null;
-    final other = comparedTo;
-    final soonerThanEasy = other?.months != null && months != null ? other!.months! - months : null;
-    final bg = other == null ? cs.primaryContainer : cs.tertiaryContainer;
-    final fg = other == null ? cs.onPrimaryContainer : cs.onTertiaryContainer;
+    final plan = this.plan;
+    final bg = allOut ? cs.tertiaryContainer : cs.primaryContainer;
+    final fg = allOut ? cs.onTertiaryContainer : cs.onPrimaryContainer;
+    final heading = title == null ? '' : '$title · ';
     return Card(
       color: bg,
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 6),
       child: Padding(
         padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: t.labelLarge?.copyWith(color: fg)),
-            Text(
-              months == null ? 'ยังไม่หมด' : fmtMonthYear(addMonths(today, months)),
-              style: t.headlineSmall?.copyWith(color: fg, fontWeight: FontWeight.bold),
-            ),
-            Text(
-              months == null
-                  ? 'จ่ายเท่านี้ดอกเบี้ยกินหมด หนี้ไม่ลด ลองเพิ่มเงินโปะ'
-                  : [
-                      'อีก ${fmtMonths(months)}',
-                      if (other != null && soonerThanEasy != null && soonerThanEasy > 0)
-                        'เร็วกว่าแบบที่ไหว ${fmtMonths(soonerThanEasy)}'
-                      else if (other != null && soonerThanEasy == 0)
-                        'หมดเดือนเดียวกับแบบที่ไหว แต่ดอกน้อยกว่า'
-                      else if (other == null && sooner != null && sooner > 0)
-                        'เร็วกว่าจ่ายแค่ขั้นต่ำ ${fmtMonths(sooner)}',
-                      if (other == null && base.months == null) 'ถ้าจ่ายแค่ขั้นต่ำ หนี้จะไม่หมด',
-                    ].join(' · '),
-              style: t.bodyMedium?.copyWith(color: fg),
-            ),
-            const Divider(height: 24),
-            InfoRow('จ่ายทุกเดือน', fmtMoney(plan.firstMonthPayment), bold: true),
-            Text(
-              'ขั้นต่ำบัตร ค่างวดทุกรายการ${extra > 0 ? ' และเงินโปะ ${fmtMoney(extra)}' : ''} '
-              'หนี้ก้อนไหนหมด เงินก้อนนั้นไปโปะก้อนถัดไป',
-              style: t.bodySmall?.copyWith(color: fg),
-            ),
-            const SizedBox(height: 6),
-            InfoRow('ดอกเบี้ยรวมจากนี้ไป', fmtMoney(plan.totalInterest), valueColor: cs.error),
-            if (base.totalInterest - plan.totalInterest > 1)
-              InfoRow('ประหยัดดอกเบี้ย', fmtMoney(base.totalInterest - plan.totalInterest),
-                  valueColor: cs.positive, bold: true),
-            if (other != null && other.totalInterest - plan.totalInterest > 1)
-              InfoRow('ประหยัดกว่าแบบที่ไหว', fmtMoney(other.totalInterest - plan.totalInterest), valueColor: cs.positive),
-          ],
-        ),
+        child: plan == null ? _short(t, cs, fg, heading) : _done(t, cs, fg, heading, plan),
       ),
+    );
+  }
+
+  Widget _short(TextTheme t, ColorScheme cs, Color fg, String heading) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('$heading${fmtMoney(budget)}/เดือน', style: t.labelLarge?.copyWith(color: fg)),
+          Text('ยังไม่พอจ่ายขั้นต่ำ',
+              style: t.headlineSmall?.copyWith(color: cs.error, fontWeight: FontWeight.bold)),
+          Text(
+            'ขั้นต่ำบัตรและค่างวดรวมประมาณ ${fmtMoney(due)}/เดือน ขาดอีก ${fmtMoney(due - budget)} '
+            'ถ้าจ่ายไม่ถึงขั้นต่ำ จะโดนค่าปรับและดอกผิดนัด',
+            style: t.bodyMedium?.copyWith(color: fg),
+          ),
+          if (base.months != null) ...[
+            const Divider(height: 24),
+            InfoRow('ถ้าจ่ายครบขั้นต่ำทุกเดือน', 'หมด ${fmtMonthYear(addMonths(today, base.months!))}'),
+          ],
+        ],
+      );
+
+  Widget _done(TextTheme t, ColorScheme cs, Color fg, String heading, PayoffResult plan) {
+    final months = plan.months;
+    final sooner = months != null && base.months != null ? base.months! - months : null;
+    final other = comparedTo;
+    final soonerThanEasy = other?.months != null && months != null ? other!.months! - months : null;
+    final extra = budget - due;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('$headingปลดหนี้หมด', style: t.labelLarge?.copyWith(color: fg)),
+        Text(
+          months == null ? 'ยังไม่หมด' : fmtMonthYear(addMonths(today, months)),
+          style: t.headlineSmall?.copyWith(color: fg, fontWeight: FontWeight.bold),
+        ),
+        Text(
+          months == null
+              ? 'จ่ายเท่านี้ดอกเบี้ยกินหมด หนี้ไม่ลด ลองเพิ่มเงินที่จ่ายต่อเดือน'
+              : [
+                  'อีก ${fmtMonths(months)}',
+                  if (other != null && soonerThanEasy != null && soonerThanEasy > 0)
+                    'เร็วกว่าแบบที่ไหว ${fmtMonths(soonerThanEasy)}'
+                  else if (other != null && soonerThanEasy == 0)
+                    'หมดเดือนเดียวกับแบบที่ไหว แต่ดอกน้อยกว่า'
+                  else if (sooner != null && sooner > 0)
+                    'เร็วกว่าจ่ายแค่ขั้นต่ำ ${fmtMonths(sooner)}',
+                  if (other == null && base.months == null) 'ถ้าจ่ายแค่ขั้นต่ำ หนี้จะไม่หมด',
+                ].join(' · '),
+          style: t.bodyMedium?.copyWith(color: fg),
+        ),
+        const Divider(height: 24),
+        InfoRow('จ่ายทุกเดือน', fmtMoney(plan.firstMonthPayment), bold: true),
+        Text(
+          extra > 0.005
+              ? 'ขั้นต่ำบัตรและค่างวด ${fmtMoney(due)} + โปะ ${fmtMoney(extra)} '
+                  'หนี้ก้อนไหนหมด เงินก้อนนั้นไปโปะก้อนถัดไป'
+              : 'ขั้นต่ำบัตรและค่างวดทุกรายการ หนี้ก้อนไหนหมด เงินก้อนนั้นไปโปะก้อนถัดไป',
+          style: t.bodySmall?.copyWith(color: fg),
+        ),
+        const SizedBox(height: 6),
+        InfoRow('ดอกเบี้ยรวมจากนี้ไป', fmtMoney(plan.totalInterest), valueColor: cs.error),
+        if (base.totalInterest - plan.totalInterest > 1)
+          InfoRow('ประหยัดดอกเบี้ย', fmtMoney(base.totalInterest - plan.totalInterest),
+              valueColor: cs.positive, bold: true),
+        if (other != null && other.totalInterest - plan.totalInterest > 1)
+          InfoRow('ประหยัดกว่าแบบที่ไหว', fmtMoney(other.totalInterest - plan.totalInterest), valueColor: cs.positive),
+      ],
     );
   }
 }
