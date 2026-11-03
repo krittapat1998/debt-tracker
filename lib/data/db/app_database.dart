@@ -27,30 +27,43 @@ class AppDatabase {
         version: _version,
         onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
         onCreate: (db, _) => _create(db),
-        onUpgrade: (db, oldVersion, _) async {
-          final batch = db.batch();
-          if (oldVersion < 2) _createSpendings(batch);
-          if (oldVersion < 3) {
-            batch.execute('ALTER TABLE credit_lines ADD COLUMN balance_as_of TEXT');
-            // A version 1 database just got the spendings table with this column.
-            if (oldVersion == 2) batch.execute('ALTER TABLE spendings ADD COLUMN line_balance_applied REAL');
-          }
-          if (oldVersion < 4) _createRecurringCharges(batch);
-          if (oldVersion < 5) {
-            batch.execute('ALTER TABLE installment_plans ADD COLUMN anchor_day INTEGER');
-            batch.execute('ALTER TABLE installment_plans ADD COLUMN posted_through INTEGER');
-          }
-          if (oldVersion < 6) batch.execute('ALTER TABLE accounts ADD COLUMN color INTEGER');
-          if (oldVersion < 7) batch.execute('ALTER TABLE installment_plans ADD COLUMN rate_steps TEXT');
-          if (oldVersion < 8) {
-            batch.execute('ALTER TABLE installment_plans ADD COLUMN disbursed_on TEXT');
-            batch.execute('ALTER TABLE installment_plans ADD COLUMN first_payment_on TEXT');
-          }
-          await batch.commit(noResult: true);
-        },
+        onUpgrade: (db, oldVersion, _) => _upgrade(db, oldVersion),
+        // An older build opening this database only lowers the version
+        // number; tables and columns stay, so upgrades skip what exists.
+        onDowngrade: (db, _, _) async {},
       ),
     );
     return AppDatabase._(db);
+  }
+
+  /// Brings an older database up to date. Every step checks first: an
+  /// older app (e.g. from TestFlight) may have lowered the version of a
+  /// database that already has the newer tables and columns.
+  static Future<void> _upgrade(Database db, int oldVersion) async {
+    final batch = db.batch();
+    if (oldVersion < 2) _createSpendings(batch);
+    if (oldVersion < 4) _createRecurringCharges(batch);
+    await batch.commit(noResult: true);
+    if (oldVersion < 3) {
+      await _addColumn(db, 'credit_lines', 'balance_as_of', 'TEXT');
+      await _addColumn(db, 'spendings', 'line_balance_applied', 'REAL');
+    }
+    if (oldVersion < 5) {
+      await _addColumn(db, 'installment_plans', 'anchor_day', 'INTEGER');
+      await _addColumn(db, 'installment_plans', 'posted_through', 'INTEGER');
+    }
+    if (oldVersion < 6) await _addColumn(db, 'accounts', 'color', 'INTEGER');
+    if (oldVersion < 7) await _addColumn(db, 'installment_plans', 'rate_steps', 'TEXT');
+    if (oldVersion < 8) {
+      await _addColumn(db, 'installment_plans', 'disbursed_on', 'TEXT');
+      await _addColumn(db, 'installment_plans', 'first_payment_on', 'TEXT');
+    }
+  }
+
+  static Future<void> _addColumn(Database db, String table, String column, String type) async {
+    final columns = await db.rawQuery('PRAGMA table_info($table)');
+    if (columns.any((c) => c['name'] == column)) return;
+    await db.execute('ALTER TABLE $table ADD COLUMN $column $type');
   }
 
   static Future<void> _create(Database db) async {
@@ -140,7 +153,7 @@ class AppDatabase {
 
   static void _createSpendings(Batch batch) {
     batch.execute('''
-      CREATE TABLE spendings (
+      CREATE TABLE IF NOT EXISTS spendings (
         id TEXT PRIMARY KEY,
         account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
         credit_line_id TEXT REFERENCES credit_lines(id) ON DELETE SET NULL,
@@ -151,12 +164,12 @@ class AppDatabase {
         line_balance_applied REAL,
         created_at TEXT NOT NULL
       )''');
-    batch.execute('CREATE INDEX idx_spendings_account ON spendings(account_id, date)');
+    batch.execute('CREATE INDEX IF NOT EXISTS idx_spendings_account ON spendings(account_id, date)');
   }
 
   static void _createRecurringCharges(Batch batch) {
     batch.execute('''
-      CREATE TABLE recurring_charges (
+      CREATE TABLE IF NOT EXISTS recurring_charges (
         id TEXT PRIMARY KEY,
         account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
         credit_line_id TEXT REFERENCES credit_lines(id) ON DELETE SET NULL,

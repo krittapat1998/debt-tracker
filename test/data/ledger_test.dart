@@ -596,6 +596,23 @@ void main() {
     expect(await upgraded.db.query('recurring_charges'), isEmpty);
   });
 
+  test('a database an older build lowered the version of opens again without re-adding columns', () async {
+    final dir = Directory.systemTemp.createTempSync('debt_db');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final path = '${dir.path}/downgraded.db';
+    final current = await AppDatabase.open(factory: databaseFactoryFfi, path: path);
+    // An older TestFlight build opened it: newer columns stay, the version drops.
+    await current.db.setVersion(6);
+    await current.close();
+
+    final reopened = await AppDatabase.open(factory: databaseFactoryFfi, path: path);
+    addTearDown(reopened.close);
+    expect(await reopened.db.getVersion(), 8);
+    final columns = [for (final c in await reopened.db.rawQuery('PRAGMA table_info(installment_plans)')) c['name']];
+    expect(columns.where((c) => c == 'rate_steps'), hasLength(1));
+    expect(columns, containsAll(['disbursed_on', 'first_payment_on']));
+  });
+
   test('opening a version 2 database keeps spending as added to the balance', () async {
     final dir = Directory.systemTemp.createTempSync('debt_db');
     addTearDown(() => dir.deleteSync(recursive: true));

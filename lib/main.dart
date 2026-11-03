@@ -14,21 +14,35 @@ Future<void> main() async {
   final binding = WidgetsFlutterBinding.ensureInitialized();
   // Keeps the native launch screen (the app icon) up a second longer.
   binding.deferFirstFrame();
-  await initializeDateFormatting('th');
-  final db = await AppDatabase.open();
-  final settings = SettingsService(SqliteSettingsRepository(db));
-  final theme = await settings.themeChoice();
-  final appLock = await settings.appLockEnabled();
-  await NotificationService.instance.init();
-  await HomeWidgetService().init();
-  runApp(ProviderScope(
-    overrides: [
-      databaseProvider.overrideWithValue(db),
-      initialThemeChoiceProvider.overrideWithValue(theme),
-      initialAppLockProvider.overrideWithValue(appLock),
-    ],
-    child: const DebtTrackerApp(),
-  ));
+  try {
+    await initializeDateFormatting('th');
+    final db = await AppDatabase.open();
+    final settings = SettingsService(SqliteSettingsRepository(db));
+    final theme = await settings.themeChoice();
+    final appLock = await settings.appLockEnabled();
+    await NotificationService.instance.init();
+    await HomeWidgetService().init();
+    runApp(ProviderScope(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        initialThemeChoiceProvider.overrideWithValue(theme),
+        initialAppLockProvider.overrideWithValue(appLock),
+      ],
+      child: const DebtTrackerApp(),
+    ));
+  } catch (e) {
+    // Say what went wrong instead of staying on the launch screen.
+    runApp(MaterialApp(
+      home: Scaffold(
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text('เปิดแอพไม่สำเร็จ ข้อมูลยังอยู่ในเครื่อง ลองปิดแล้วเปิดใหม่ หรือแจ้งผู้พัฒนา\n\n$e'),
+          ),
+        ),
+      ),
+    ));
+  }
   await Future<void>.delayed(const Duration(seconds: 1));
   binding.allowFirstFrame();
 }
