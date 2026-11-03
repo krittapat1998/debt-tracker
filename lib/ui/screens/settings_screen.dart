@@ -151,6 +151,16 @@ class SettingsScreen extends ConsumerWidget {
               'จึงควรตั้งรหัสผ่านทุกครั้งก่อนเก็บไว้นอกเครื่อง',
             ),
           ),
+          const SectionHeader('เกี่ยวกับแอพ'),
+          ListTile(
+            leading: const Icon(Icons.info_outline),
+            title: const Text('Debt Tracker'),
+            subtitle: Text('เวอร์ชัน ${ref.watch(appVersionProvider).valueOrNull ?? '-'}'),
+          ),
+          const ListTile(
+            leading: Icon(Icons.code),
+            title: Text('พัฒนาโดย Kritdev.com'),
+          ),
         ],
       ),
     );

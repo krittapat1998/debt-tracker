@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../data/backup/backup_service.dart';
 import '../data/db/app_database.dart';
@@ -115,7 +116,14 @@ class AppLockNotifier extends Notifier<bool> {
 final appLockProvider = NotifierProvider<AppLockNotifier, bool>(AppLockNotifier.new);
 
 /// Monthly extra for the debt-free plan (แผนปลดหนี้).
+/// "1.0.0 (11)": the app version and build, for the settings page.
+final appVersionProvider = FutureProvider<String>((ref) async {
+  final info = await PackageInfo.fromPlatform();
+  return '${info.version} (${info.buildNumber})';
+});
+
 final payoffExtraProvider = FutureProvider<double>((ref) => ref.watch(settingsServiceProvider).payoffExtra());
+final payoffMaxProvider = FutureProvider<double>((ref) => ref.watch(settingsServiceProvider).payoffMax());
 
 final notificationPrefsProvider =
     FutureProvider<NotificationPrefs>((ref) => ref.watch(settingsServiceProvider).notificationPrefs());

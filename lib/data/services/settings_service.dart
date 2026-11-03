@@ -46,6 +46,7 @@ class SettingsService {
   static const _theme = 'theme';
   static const _appLock = 'app_lock';
   static const _payoffExtra = 'payoff_extra';
+  static const _payoffMax = 'payoff_max';
 
   Future<NotificationPrefs> notificationPrefs() async => NotificationPrefs(
         enabled: (await _repo.get(_notifEnabled)) != '0',
@@ -77,6 +78,11 @@ class SettingsService {
   Future<double> payoffExtra() async => double.tryParse(await _repo.get(_payoffExtra) ?? '') ?? 0;
 
   Future<void> setPayoffExtra(double v) => _repo.set(_payoffExtra, '$v');
+
+  /// The most the user could put toward debts each month, to compare.
+  Future<double> payoffMax() async => double.tryParse(await _repo.get(_payoffMax) ?? '') ?? 0;
+
+  Future<void> setPayoffMax(double v) => _repo.set(_payoffMax, '$v');
 
   Future<DateTime?> lastSmsScan() async =>
       DateTime.tryParse(await _repo.get(_smsLastScan) ?? '');
