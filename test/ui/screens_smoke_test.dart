@@ -32,6 +32,7 @@ import 'package:debt_tracker/ui/screens/sms_patterns_screen.dart';
 import 'package:debt_tracker/ui/theme.dart';
 import 'package:debt_tracker/ui/widgets/card_colors.dart';
 import 'package:debt_tracker/ui/widgets/common.dart';
+import 'package:debt_tracker/ui/widgets/keyboard_dismiss.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -179,6 +180,7 @@ void main() {
         locale: const Locale('th'),
         supportedLocales: const [Locale('th'), Locale('en')],
         localizationsDelegates: GlobalMaterialLocalizations.delegates,
+        builder: (context, child) => TapOutsideClosesKeyboard(child: child!),
         // A fresh key per pump so a re-pumped screen gets a new State.
         home: KeyedSubtree(key: UniqueKey(), child: screen),
       ),
@@ -897,6 +899,22 @@ void main() {
     final settings = container.read(settingsServiceProvider);
     expect(await tester.runAsync(() => settings.payoffMax()), 5000);
     expect(await tester.runAsync(() => settings.payoffExtra()), 1000);
+  });
+
+  testWidgets('debt-free plan: a tap outside the amount closes the number pad and keeps the amount', (tester) async {
+    final container = await pump(tester, const PayoffPlanScreen());
+    final field = find.widgetWithText(TextFormField, 'โปะที่ไหว/เดือน');
+    await tester.tap(field);
+    await tester.pump();
+    expect(tester.testTextInput.isVisible, isTrue);
+    await tester.enterText(field, '10000');
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await settle(tester);
+    await tester.tap(find.text('ปลดหนี้หมด'));
+    await tester.pump();
+    expect(tester.testTextInput.isVisible, isFalse);
+    expect(find.text('10000'), findsOneWidget);
+    expect(await tester.runAsync(() => container.read(settingsServiceProvider).payoffExtra()), 10000);
   });
 
   testWidgets('settings show the app version and who made it', (tester) async {

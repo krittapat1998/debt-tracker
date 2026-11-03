@@ -12,6 +12,7 @@ import 'screens/history_screen.dart';
 import 'screens/settings_screen.dart';
 import 'theme.dart';
 import 'widgets/app_lock_gate.dart';
+import 'widgets/keyboard_dismiss.dart';
 
 class DebtTrackerApp extends ConsumerWidget {
   const DebtTrackerApp({super.key});
@@ -32,7 +33,7 @@ class DebtTrackerApp extends ConsumerWidget {
       locale: const Locale('th'),
       supportedLocales: const [Locale('th'), Locale('en')],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
-      builder: (context, child) => AppLockGate(child: child!),
+      builder: (context, child) => TapOutsideClosesKeyboard(child: AppLockGate(child: child!)),
       home: const HomeShell(),
     );
   }
