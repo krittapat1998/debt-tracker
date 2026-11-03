@@ -6,11 +6,20 @@ import '../../core/date_utils.dart';
 import '../../core/formatters.dart';
 
 /// Total debt month by month: the plan as a filled line, the baseline as a
-/// thin grey one. Long baselines are cut at [maxMonths].
+/// thin grey one, and an optional [stretch] plan (paying the most one can)
+/// as a third line. Long baselines are cut at [maxMonths].
 class DebtChart extends StatelessWidget {
-  const DebtChart({super.key, required this.plan, required this.baseline, required this.start, this.maxMonths = 360});
+  const DebtChart({
+    super.key,
+    required this.plan,
+    required this.baseline,
+    required this.start,
+    this.stretch,
+    this.maxMonths = 360,
+  });
   final List<double> plan;
   final List<double> baseline;
+  final List<double>? stretch;
   final DateTime start;
   final int maxMonths;
 
@@ -25,9 +34,11 @@ class DebtChart extends StatelessWidget {
         painter: _DebtChartPainter(
           plan: plan,
           baseline: baseline,
+          stretch: stretch,
           start: start,
           maxMonths: maxMonths,
           planColor: cs.primary,
+          stretchColor: cs.tertiary,
           baseColor: cs.outline,
           gridColor: cs.outlineVariant,
           labelStyle: t.labelSmall!.copyWith(color: cs.onSurfaceVariant),
@@ -41,9 +52,11 @@ class _DebtChartPainter extends CustomPainter {
   _DebtChartPainter({
     required this.plan,
     required this.baseline,
+    required this.stretch,
     required this.start,
     required this.maxMonths,
     required this.planColor,
+    required this.stretchColor,
     required this.baseColor,
     required this.gridColor,
     required this.labelStyle,
@@ -51,9 +64,11 @@ class _DebtChartPainter extends CustomPainter {
 
   final List<double> plan;
   final List<double> baseline;
+  final List<double>? stretch;
   final DateTime start;
   final int maxMonths;
   final Color planColor;
+  final Color stretchColor;
   final Color baseColor;
   final Color gridColor;
   final TextStyle labelStyle;
@@ -110,6 +125,16 @@ class _DebtChartPainter extends CustomPainter {
         ..strokeWidth = 2.5
         ..style = PaintingStyle.stroke,
     );
+    final most = stretch;
+    if (most != null && most.isNotEmpty) {
+      canvas.drawPath(
+        line(most),
+        Paint()
+          ..color = stretchColor
+          ..strokeWidth = 2.5
+          ..style = PaintingStyle.stroke,
+      );
+    }
 
     _label(canvas, 'ตอนนี้', Offset(chart.left, chart.bottom + 4), width: 60);
     _label(canvas, fmtMonthYear(addMonths(start, months)), Offset(chart.right - 110, chart.bottom + 4),
@@ -128,5 +153,5 @@ class _DebtChartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_DebtChartPainter old) =>
-      old.plan != plan || old.baseline != baseline || old.planColor != planColor;
+      old.plan != plan || old.baseline != baseline || old.stretch != stretch || old.planColor != planColor;
 }

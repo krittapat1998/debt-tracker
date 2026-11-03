@@ -36,6 +36,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class _MemorySettings implements SettingsRepository {
   final _m = <String, String>{};
@@ -880,6 +881,30 @@ void main() {
     expect(find.descendant(of: find.widgetWithText(ListTile, 'First Choice · สินเชื่อก้อน'), matching: find.textContaining('โปะอันนี้ก่อน')),
         findsOneWidget);
     expect(await tester.runAsync(() => container.read(settingsServiceProvider).payoffExtra()), 2000);
+  });
+
+  testWidgets('debt-free plan: comfortable and all-out amounts side by side', (tester) async {
+    final container = await pump(tester, const PayoffPlanScreen());
+    await tester.enterText(find.widgetWithText(TextFormField, 'โปะที่ไหว/เดือน'), '1000');
+    await tester.enterText(find.widgetWithText(TextFormField, 'โปะเต็มที่/เดือน'), '5000');
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await settle(tester);
+    expect(find.text('แบบที่ไหว · ปลดหนี้หมด'), findsOneWidget);
+    expect(find.text('แบบเต็มที่ · ปลดหนี้หมด'), findsOneWidget);
+    // The sample's last loan is in lock-in, so both finish together; all-out still saves interest.
+    expect(find.textContaining('หมดเดือนเดียวกับแบบที่ไหว'), findsOneWidget);
+    expect(find.text('ประหยัดกว่าแบบที่ไหว'), findsOneWidget);
+    final settings = container.read(settingsServiceProvider);
+    expect(await tester.runAsync(() => settings.payoffMax()), 5000);
+    expect(await tester.runAsync(() => settings.payoffExtra()), 1000);
+  });
+
+  testWidgets('settings show the app version and who made it', (tester) async {
+    PackageInfo.setMockInitialValues(
+        appName: 'Debt Tracker', packageName: 'com.krittapat.debtTracker', version: '1.0.0', buildNumber: '11', buildSignature: '');
+    await pump(tester, const SettingsScreen());
+    await tester.scrollUntilVisible(find.text('พัฒนาโดย Kritdev.com'), 300, scrollable: find.byType(Scrollable).first);
+    expect(find.text('เวอร์ชัน 1.0.0 (11)'), findsOneWidget);
   });
 
   testWidgets('settings speak plainly, and the SMS tester reads a bank message', (tester) async {
