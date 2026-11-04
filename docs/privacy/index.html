@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>นโยบายความเป็นส่วนตัว · Debt Tracker</title>
+<meta name="description" content="Debt Tracker ไม่เก็บ ไม่ส่ง และไม่ขายข้อมูลของคุณ ทุกอย่างอยู่ในเครื่องของคุณเท่านั้น">
+<!-- Same text as lib/ui/screens/privacy_policy_screen.dart: change both together. -->
+<style>
+  :root {
+    --bg: #f5f9fd; --card: #ffffff; --text: #0f2a3d; --muted: #4f6b80;
+    --accent: #1556e0; --accent-bg: #d6eefc; --accent-text: #003a5c; --line: #dbe6f0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e1418; --card: #161e24; --text: #e3edf5; --muted: #9fb3c3;
+      --accent: #7fb6ff; --accent-bg: #0b3a57; --accent-text: #d6eefc; --line: #26323b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.7 -apple-system, BlinkMacSystemFont, "Sukhumvit Set", "Noto Sans Thai", "Segoe UI", sans-serif;
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 40px 16px 64px; }
+  header { display: flex; align-items: center; gap: 14px; margin-bottom: 24px; }
+  header .mark {
+    width: 52px; height: 52px; border-radius: 13px; flex: none;
+    background: linear-gradient(135deg, #0a2a7a, #2f86f6);
+    display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 22px;
+  }
+  header p { margin: 0; color: var(--muted); font-size: 14px; }
+  h1 { font-size: 26px; line-height: 1.3; margin: 0; }
+  h2 { font-size: 20px; margin: 48px 0 12px; padding-top: 32px; border-top: 1px solid var(--line); }
+  h3 { font-size: 16px; margin: 22px 0 4px; }
+  p { margin: 0 0 4px; }
+  .summary {
+    background: var(--accent-bg); color: var(--accent-text); border-radius: 14px;
+    padding: 16px 18px; font-weight: 600; margin: 12px 0 8px;
+  }
+  .updated { color: var(--muted); font-size: 14px; margin-bottom: 8px; }
+  a { color: var(--accent); }
+  nav { font-size: 14px; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="mark" aria-hidden="true">฿</div>
+    <div>
+      <h1>นโยบายความเป็นส่วนตัว</h1>
+      <p>Debt Tracker · แอพติดตามหนี้และวางแผนปลดหนี้</p>
+    </div>
+  </header>
+  <nav><a href="#english">English version below</a></nav>
+
+  <div class="summary">Debt Tracker ไม่เก็บ ไม่ส่ง และไม่ขายข้อมูลของคุณ ทุกอย่างที่บันทึกอยู่ในเครื่องนี้เท่านั้น ไม่มีบัญชีผู้ใช้ และไม่มีเซิร์ฟเวอร์</div>
+  <p class="updated">ปรับปรุงล่าสุด 5 พฤศจิกายน 2569</p>
+
+  <h3>ข้อมูลที่คุณบันทึก</h3>
+  <p>ชื่อบัตร ยอดหนี้ วงเงิน ดอกเบี้ย รายการผ่อน การจ่าย และยอดใช้จ่ายที่คุณกรอก เก็บในฐานข้อมูลของแอพบนเครื่องนี้ แอพไม่ส่งข้อมูลเหล่านี้ออกทางอินเทอร์เน็ต และผู้พัฒนาไม่เห็นข้อมูลของคุณ</p>
+  <h3>SMS ธนาคาร</h3>
+  <p>บน iPhone แอพอ่านเฉพาะข้อความที่คุณวางเอง บน Android ถ้าคุณอนุญาต แอพจะอ่าน SMS จากธนาคารเพื่อดึงยอด ทั้งหมดอ่านในเครื่อง ไม่เก็บรหัส OTP ไม่ส่งข้อความออกจากเครื่อง และทุกรายการต้องให้คุณยืนยันก่อนบันทึก</p>
+  <h3>Face ID และสแกนนิ้ว</h3>
+  <p>การล็อกแอพใช้ระบบยืนยันตัวตนของเครื่อง แอพรู้แค่ว่ายืนยันผ่านหรือไม่ ไม่เห็นและไม่เก็บข้อมูลใบหน้าหรือลายนิ้วมือ</p>
+  <h3>การแจ้งเตือนและวิดเจ็ต</h3>
+  <p>การแจ้งเตือนตั้งเวลาไว้ในเครื่อง วิดเจ็ตบนหน้าจอโฮมอ่านยอดสรุปจากพื้นที่ที่แชร์กันภายในเครื่องเดียวกัน</p>
+  <h3>สำรองข้อมูล</h3>
+  <p>ไฟล์สำรองสร้างเมื่อคุณกดเองเท่านั้น และไปอยู่ที่ที่คุณเลือก ตั้งรหัสผ่านเพื่อเข้ารหัสไฟล์ได้ ส่วนไฟล์สำหรับเปิดใน Excel ไม่เข้ารหัส ข้อมูลในแอพอาจรวมอยู่ในการสำรองทั้งเครื่องของ iPhone (iCloud หรือคอมพิวเตอร์) ตามการตั้งค่าเครื่องของคุณ</p>
+  <h3>โฆษณาและการติดตาม</h3>
+  <p>แอพไม่มีโฆษณา ไม่มีระบบเก็บสถิติการใช้งาน และไม่ติดตามคุณข้ามแอพหรือเว็บไซต์ ถ้าคุณเปิดแชร์ข้อมูลวิเคราะห์กับนักพัฒนาไว้ในการตั้งค่าเครื่อง Apple อาจส่งรายงานแอพค้างแบบไม่ระบุตัวตนให้ผู้พัฒนา</p>
+  <h3>ลบข้อมูล</h3>
+  <p>ลบบัตรหรือรายการในแอพได้ทุกเมื่อ ถ้าลบแอพ ข้อมูลทั้งหมดในเครื่องจะหายไปด้วย ยกเว้นไฟล์สำรองที่คุณส่งออกไว้เอง</p>
+  <h3>การเปลี่ยนแปลงและติดต่อ</h3>
+  <p>ถ้านโยบายนี้เปลี่ยน จะแจ้งในหน้านี้พร้อมวันที่ปรับปรุง สอบถามได้ที่ <a href="https://kritdev.com">kritdev.com</a></p>
+
+  <h2 id="english" lang="en">Privacy policy (English)</h2>
+  <div lang="en">
+    <div class="summary">Debt Tracker does not collect, send or sell your data. Everything you record stays on this device. There are no accounts and no servers.</div>
+    <p class="updated">Last updated 5 November 2026</p>
+
+    <h3>What you record</h3>
+    <p>Card names, balances, limits, interest rates, installment plans, payments and spending you enter are stored in the app's database on this device. The app does not send them over the internet, and the developer cannot see them.</p>
+    <h3>Bank SMS</h3>
+    <p>On iPhone the app only reads text you paste in. On Android, if you allow it, the app reads bank SMS to pick up amounts. Messages are read on the device, OTP codes are never stored, nothing leaves the device, and every entry waits for your confirmation.</p>
+    <h3>Face ID and fingerprint</h3>
+    <p>App lock uses the device's own authentication. The app only learns whether it succeeded; it never sees or stores face or fingerprint data.</p>
+    <h3>Notifications and widget</h3>
+    <p>Reminders are scheduled on the device. The home screen widget reads a summary from storage shared on the same device.</p>
+    <h3>Backups</h3>
+    <p>Backup files are created only when you ask, and go where you choose. You can protect them with a password (AES-256 encryption). Spreadsheet (CSV) exports are not encrypted. App data may be included in your iPhone's own device backup (iCloud or computer), depending on your settings.</p>
+    <h3>Ads and tracking</h3>
+    <p>No ads, no analytics, no tracking across apps or websites. If you share analytics with developers in your device settings, Apple may pass on anonymous crash reports.</p>
+    <h3>Deleting data</h3>
+    <p>Delete any card or entry in the app at any time. Deleting the app removes all of its data from the device, except backup files you exported yourself.</p>
+    <h3>Changes and contact</h3>
+    <p>Changes to this policy will appear here with a new date. Contact: <a href="https://kritdev.com">kritdev.com</a></p>
+  </div>
+</main>
+</body>
+</html>

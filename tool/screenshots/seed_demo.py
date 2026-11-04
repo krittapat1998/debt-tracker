@@ -1,7 +1,8 @@
 """Fill the simulator's app database with made-up demo data for README screenshots.
 
-usage: python3 tool/screenshots/seed_demo.py <path to debt_tracker.db> [theme]   (app must not be running)
+usage: python3 tool/screenshots/seed_demo.py <path to debt_tracker.db> [theme] [generic]   (app must not be running)
 Nothing here is real: names are common Thai card products, amounts are invented.
+Pass "generic" for App Store screenshots: no bank or product names, which Apple may treat as trademarks.
 """
 import sqlite3
 import sys
@@ -9,6 +10,16 @@ from datetime import date, timedelta, datetime
 
 db = sqlite3.connect(sys.argv[1])
 theme = sys.argv[2] if len(sys.argv) > 2 else "light"
+generic = len(sys.argv) > 3 and sys.argv[3] == "generic"
+name = {
+    "a1": "บัตรเครดิตหลัก", "a2": "บัตรเครดิตสะสมไมล์", "a3": "บัตรเงินสดฉุกเฉิน", "a4": "สินเชื่อซ่อมบ้าน",
+    "p4": "ผ่อน 48 งวด", "ktc": None, "uob": None, "p1": "ผ่อนมือถือ 0% 10 เดือน",
+    "r1": "ดูหนังรายเดือน", "r2": "ฟังเพลงรายเดือน", "r3": "พื้นที่เก็บรูป",
+} if generic else {
+    "a1": "KTC Visa Platinum", "a2": "UOB Preferred Platinum", "a3": "Krungsri First Choice", "a4": "KBank Xpress Loan",
+    "p4": "สินเชื่อซ่อมบ้าน", "ktc": "ktc", "uob": "uob", "p1": "ผ่อน iPhone 0% 10 เดือน",
+    "r1": "Netflix", "r2": "Spotify", "r3": "iCloud+",
+}
 today = date.today()
 d = lambda n: (today + timedelta(days=n))
 iso = lambda n: d(n).isoformat()
@@ -23,14 +34,14 @@ acc = ("INSERT INTO accounts (id,name,type,issuer,card_last4,billing_day,due_day
        "statement_date,statement_due_date,shared_limit,reminder_days_before,note,color,created_at) "
        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
 # KTC: bill out, due in 3 days.
-db.execute(acc, ("a1", "KTC Visa Platinum", "creditCard", "ktc", "4821", d(-14).day, d(3).day, 23120.5, 6180.25,
+db.execute(acc, ("a1", name["a1"], "creditCard", name["ktc"], "4821", d(-14).day, d(3).day, 23120.5, 6180.25,
                  iso(-14), iso(3), None, 3, None, purple, created))
 # UOB: bill out, due in 12 days.
-db.execute(acc, ("a2", "UOB Preferred Platinum", "creditCard", "uob", "1937", d(-8).day, d(12).day, 9480, 948,
+db.execute(acc, ("a2", name["a2"], "creditCard", name["uob"], "1937", d(-8).day, d(12).day, 9480, 948,
                  iso(-8), iso(12), None, 3, None, blue, created))
-db.execute(acc, ("a3", "Krungsri First Choice", "cashCard", None, None, None, d(9).day, 0, 0, None, None, None, 3,
+db.execute(acc, ("a3", name["a3"], "cashCard", None, None, None, d(9).day, 0, 0, None, None, None, 3,
                  None, yellow, created))
-db.execute(acc, ("a4", "KBank Xpress Loan", "personalLoan", None, None, None, d(20).day, 0, 0, None, None, None, 3,
+db.execute(acc, ("a4", name["a4"], "personalLoan", None, None, None, d(20).day, 0, 0, None, None, None, 3,
                  None, green, created))
 
 line = ("INSERT INTO credit_lines (id,account_id,name,credit_limit,balance,annual_rate,interest_method,sort_order) "
@@ -44,13 +55,13 @@ db.execute(line, ("l5", "a4", "วงเงินสินเชื่อ", 1500
 plan = ("INSERT INTO installment_plans (id,account_id,credit_line_id,name,principal,annual_rate,interest_method,"
         "term_months,monthly_payment_override,start_date,lock_in_months,penalty_percent,penalty_fixed,"
         "included_in_statement,paid_before_tracking,note,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-db.execute(plan, ("p1", "a1", "l1", "ผ่อน iPhone 0% 10 เดือน", 45900, 0, "reducing", 10, None, iso(-80), 0, 0, 0, 1, 0,
+db.execute(plan, ("p1", "a1", "l1", name["p1"], 45900, 0, "reducing", 10, None, iso(-80), 0, 0, 0, 1, 0,
                   None, created))
 db.execute(plan, ("p2", "a2", "l3", "สินเชื่อ Express", 60000, 22, "reducing", 24, None, iso(-70), 12, 3, 0, 0, 2,
                   None, created))
 db.execute(plan, ("p3", "a3", "l4", "กดเงินสดผ่อน 36 งวด", 50000, 15, "flat", 36, None, iso(-130), 0, 0, 0, 0, 4,
                   None, created))
-db.execute(plan, ("p4", "a4", "l5", "สินเชื่อซ่อมบ้าน", 120000, 25, "reducing", 48, None, iso(-200), 0, 0, 0, 0, 6,
+db.execute(plan, ("p4", "a4", "l5", name["p4"], 120000, 25, "reducing", 48, None, iso(-200), 0, 0, 0, 0, 6,
                   None, created))
 
 pay = ("INSERT INTO payments (id,account_id,credit_line_id,plan_id,date,amount,type,prepayment_mode,note,source,"
@@ -74,9 +85,9 @@ for i, (n, amt, note, src) in enumerate([
 
 rc = ("INSERT INTO recurring_charges (id,account_id,credit_line_id,name,amount,every,next_date,anchor_day,active,created_at) "
       "VALUES (?,?,?,?,?,?,?,?,?,?)")
-db.execute(rc, ("r1", "a1", "l1", "Netflix", 419, "monthly", iso(6), d(6).day, 1, created))
-db.execute(rc, ("r2", "a2", "l2", "Spotify", 149, "monthly", iso(15), d(15).day, 1, created))
-db.execute(rc, ("r3", "a2", "l2", "iCloud+", 99, "monthly", iso(17), d(17).day, 1, created))
+db.execute(rc, ("r1", "a1", "l1", name["r1"], 419, "monthly", iso(6), d(6).day, 1, created))
+db.execute(rc, ("r2", "a2", "l2", name["r2"], 149, "monthly", iso(15), d(15).day, 1, created))
+db.execute(rc, ("r3", "a2", "l2", name["r3"], 99, "monthly", iso(17), d(17).day, 1, created))
 
 for k, v in {"payoff_budget": "25000.0", "payoff_budget_max": "35000.0", "theme": theme,
              "notif_asked": "1", "app_lock": "0"}.items():

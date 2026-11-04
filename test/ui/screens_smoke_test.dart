@@ -27,6 +27,7 @@ import 'package:debt_tracker/ui/screens/payment_form_screen.dart';
 import 'package:debt_tracker/ui/screens/payoff_plan_screen.dart';
 import 'package:debt_tracker/ui/screens/plan_form_screen.dart';
 import 'package:debt_tracker/ui/screens/schedule_screen.dart';
+import 'package:debt_tracker/ui/screens/privacy_policy_screen.dart';
 import 'package:debt_tracker/ui/screens/settings_screen.dart';
 import 'package:debt_tracker/ui/screens/sms_import_screen.dart';
 import 'package:debt_tracker/ui/screens/sms_patterns_screen.dart';
@@ -963,6 +964,17 @@ void main() {
     await pump(tester, const SettingsScreen());
     await tester.scrollUntilVisible(find.text('พัฒนาโดย Kritdev.com'), 300, scrollable: find.byType(Scrollable).first);
     expect(find.text('เวอร์ชัน 1.0.0 (11)'), findsOneWidget);
+  });
+
+  testWidgets('settings open the privacy policy, in Thai and English', (tester) async {
+    await pump(tester, const SettingsScreen());
+    await tester.scrollUntilVisible(find.text('นโยบายความเป็นส่วนตัว'), 300, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('นโยบายความเป็นส่วนตัว'));
+    await tester.pumpAndSettle();
+    expect(find.text(PrivacyPolicyScreen.summary), findsOneWidget);
+    await tester.scrollUntilVisible(find.text(PrivacyPolicyScreen.englishSummary), 400,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.text('Privacy policy (English)'), findsOneWidget);
   });
 
   testWidgets('settings speak plainly, and the SMS tester reads a bank message', (tester) async {
