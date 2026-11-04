@@ -4,6 +4,7 @@ import AppKit
 //   swift tool/screenshots/showcase.swift hero <out.png> <icon.png> <left.png> <center.png> <right.png>
 //   swift tool/screenshots/showcase.swift frame <out.png> <screen.png> <width>
 //   swift tool/screenshots/showcase.swift gallery <out.png> (<screen.png> <caption>)...
+//   swift tool/screenshots/showcase.swift store <out.png> <screen.png> <headline> <subline> [dark]
 
 func font(_ name: String, _ size: CGFloat) -> NSFont { NSFont(name: name, size: size) ?? .systemFont(ofSize: size) }
 func rgb(_ hex: UInt32, _ a: CGFloat = 1) -> NSColor {
@@ -143,6 +144,33 @@ case "gallery":
       text(cap, capFont, rgb(0x0F2A3D), at: NSPoint(x: x + (pw - ts.width) / 2, y: size.height - top + 40))
       phone(img, x: x, y: bottom, width: pw)
     }
+  }, args[1])
+
+case "store":
+  // App Store screenshot, 6.9" (1320×2868): headline and subline over the brand gradient, the phone below.
+  // usage: store <out.png> <screen.png> <headline> <subline> [dark]
+  let img = NSImage(contentsOfFile: args[2])!
+  let headline = args[3], subline = args[4]
+  let dark = args.count > 5 && args[5] == "dark"
+  save(canvas(1320, 2868) { size in
+    let colors = dark ? [rgb(0x050B1C), rgb(0x0A2160), rgb(0x123C9C)] : [rgb(0x0A2A7A), rgb(0x1556E0), rgb(0x2F86F6)]
+    NSGradient(colors: colors)!.draw(in: NSRect(origin: .zero, size: size), angle: -70)
+    rgb(0xFFFFFF, 0.07).setFill()
+    NSBezierPath(ovalIn: NSRect(x: 760, y: 2250, width: 900, height: 900)).fill()
+    func fitted(_ s: String, _ name: String, _ start: CGFloat, _ maxWidth: CGFloat) -> NSFont {
+      var size = start
+      while textSize(s, font(name, size)).width > maxWidth && size > 20 { size -= 2 }
+      return font(name, size)
+    }
+    let hf = fitted(headline, "SukhumvitSet-Bold", 104, 1160)
+    let hs = textSize(headline, hf)
+    text(headline, hf, .white, at: NSPoint(x: (size.width - hs.width) / 2, y: 2868 - 180 - hs.height))
+    let sf = fitted(subline, "SukhumvitSet-Medium", 50, 1160)
+    let ss = textSize(subline, sf)
+    text(subline, sf, rgb(0xFFFFFF, 0.88), at: NSPoint(x: (size.width - ss.width) / 2, y: 2868 - 180 - hs.height - 24 - ss.height))
+    let w: CGFloat = 1060
+    let h = phoneHeight(img, width: w)
+    phone(img, x: (size.width - w) / 2, y: 2868 - 560 - h, width: w)
   }, args[1])
 
 default:

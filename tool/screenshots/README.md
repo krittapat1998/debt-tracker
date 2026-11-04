@@ -3,7 +3,8 @@
 Regenerates the images in `docs/screenshots/` from the iOS Simulator (macOS only).
 
 1. Run the app on a booted simulator once, then quit it.
-2. Fill it with made-up data (theme: `light`, `dark`, `blue` or `system`):
+2. Fill it with made-up data (theme: `light`, `dark`, `blue` or `system`; add `generic` for App Store
+   screenshots, which leaves out bank and product names):
 
    ```bash
    U=<simulator udid>
@@ -21,3 +22,13 @@ Regenerates the images in `docs/screenshots/` from the iOS Simulator (macOS only
    swift tool/screenshots/showcase.swift hero docs/screenshots/hero.png assets/icon/app_icon.png chart.png dashboard.png cards.png
    swift tool/screenshots/showcase.swift gallery docs/screenshots/gallery.png dashboard.png "ภาพรวม" plan.png "แผนปลดหนี้"
    ```
+
+5. App Store screenshots come from the iPhone 17 Pro Max simulator (1320×2868) with a headline on top.
+   Apple wants them without transparency, so convert to JPEG:
+
+   ```bash
+   swift tool/screenshots/showcase.swift store store.png dashboard.png "เห็นหนี้ทั้งหมดในที่เดียว" "ยอดรวม ยอดต้องจ่ายเดือนนี้"
+   sips -s format jpeg -s formatOptions 92 store.png --out docs/app-store/screenshots/01-dashboard.jpg
+   ```
+
+   Add `dark` after the subline for the darker background.

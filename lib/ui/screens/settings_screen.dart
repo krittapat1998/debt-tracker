@@ -12,9 +12,11 @@ import '../../data/backup/backup_service.dart';
 import '../../data/services/settings_service.dart';
 import '../providers.dart';
 import '../widgets/common.dart';
+import 'privacy_policy_screen.dart';
 import 'sms_import_screen.dart';
 import 'sms_patterns_screen.dart';
 import '../widgets/app_icons.dart';
+import '../widgets/links.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -161,9 +163,18 @@ class SettingsScreen extends ConsumerWidget {
             title: const Text('Debt Tracker'),
             subtitle: Text('เวอร์ชัน ${ref.watch(appVersionProvider).valueOrNull ?? '-'}'),
           ),
-          const ListTile(
-            leading: GlyphIcon(Glyph.developer),
-            title: Text('พัฒนาโดย Kritdev.com'),
+          ListTile(
+            leading: const GlyphIcon(Glyph.privacy),
+            title: const Text('นโยบายความเป็นส่วนตัว'),
+            subtitle: const Text('ข้อมูลทั้งหมดอยู่ในเครื่องนี้ ไม่ส่งออกไปที่ไหน'),
+            trailing: const GlyphIcon(Glyph.next, size: 20),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen())),
+          ),
+          ListTile(
+            leading: const GlyphIcon(Glyph.developer),
+            title: const Text('พัฒนาโดย Kritdev.com'),
+            trailing: const GlyphIcon(Glyph.external, size: 20),
+            onTap: () => openLink(context, AppLinks.developer),
           ),
         ],
       ),

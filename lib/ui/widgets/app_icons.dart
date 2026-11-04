@@ -89,6 +89,7 @@ enum Glyph {
   done(PhosphorIconsRegular.check),
   clear(PhosphorIconsRegular.x),
   info(PhosphorIconsDuotone.info),
+  external(PhosphorIconsRegular.arrowSquareOut),
   notFound(PhosphorIconsDuotone.magnifyingGlass),
   next(PhosphorIconsRegular.caretRight),
   previous(PhosphorIconsRegular.caretLeft),
