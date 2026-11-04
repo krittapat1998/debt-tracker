@@ -13,6 +13,7 @@ import '../widgets/card_colors.dart';
 import '../widgets/common.dart';
 import '../widgets/form_fields.dart';
 import 'plan_form_screen.dart';
+import '../widgets/app_icons.dart';
 
 class _LineDraft {
   _LineDraft({
@@ -271,7 +272,7 @@ class _AccountFormScreenState extends ConsumerState<AccountFormScreen> {
               ],
               onChanged: (v) => setState(() => _reminderDays = v ?? 3),
             ),
-            SectionHeader('วงเงินย่อย'),
+            SectionHeader('วงเงินย่อย', icon: Glyph.limit),
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Text(
@@ -282,7 +283,7 @@ class _AccountFormScreenState extends ConsumerState<AccountFormScreen> {
             ),
             for (final (i, l) in _lines.indexed) _lineEditor(i, l),
             OutlinedButton.icon(
-              icon: const Icon(Icons.add),
+              icon: const GlyphIcon(Glyph.add),
               label: const Text('เพิ่มวงเงินย่อย'),
               onPressed: () => setState(() => _lines.add(_LineDraft(name: 'วงเงินสินเชื่อ', rate: 25))),
             ),
@@ -294,7 +295,7 @@ class _AccountFormScreenState extends ConsumerState<AccountFormScreen> {
                 helper: 'เว้นว่าง = รวมวงเงินย่อยทุกอัน',
               ),
             ],
-            SectionHeader('ยอดเรียกเก็บงวดล่าสุด (ถ้ามี)'),
+            SectionHeader('ยอดเรียกเก็บงวดล่าสุด (ถ้ามี)', icon: Glyph.statement),
             AmountField(controller: _statement, label: 'ยอดเรียกเก็บ'),
             formGap,
             AmountField(controller: _minimum, label: 'ยอดขั้นต่ำ'),
@@ -342,7 +343,7 @@ class _AccountFormScreenState extends ConsumerState<AccountFormScreen> {
                 if (_lines.length > 1)
                   IconButton(
                     tooltip: 'ลบวงเงินนี้',
-                    icon: const Icon(Icons.delete_outline),
+                    icon: const GlyphIcon(Glyph.delete),
                     onPressed: () => setState(() => _lines.removeAt(index).dispose()),
                   ),
               ],

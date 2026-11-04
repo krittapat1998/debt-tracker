@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/formatters.dart';
+import 'app_icons.dart';
 
 final _decimalInput = FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'));
 
@@ -154,8 +155,8 @@ class DateField extends StatelessWidget {
           helperText: helper,
           helperMaxLines: 3,
           suffixIcon: clearable && value != null
-              ? IconButton(icon: const Icon(Icons.clear), onPressed: () => onChanged(null))
-              : const Icon(Icons.calendar_today_outlined, size: 20),
+              ? IconButton(icon: const GlyphIcon(Glyph.clear), onPressed: () => onChanged(null))
+              : const GlyphIcon(Glyph.dueDate, size: 20),
         ),
         child: Text(value == null ? 'ไม่ระบุ' : fmtDate(value!)),
       ),

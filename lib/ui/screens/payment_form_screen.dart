@@ -14,6 +14,7 @@ import '../providers.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/form_fields.dart';
+import '../widgets/app_icons.dart';
 
 /// Quick payment entry: date / account / target / amount / type. With
 /// [existing] it corrects a recorded payment instead.
@@ -232,7 +233,7 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
       body: AsyncBody(
         value: portfolio,
         builder: (s) {
-          if (s.isEmpty) return const EmptyState(icon: Icons.credit_card_off, title: 'ยังไม่มีบัตร/สินเชื่อ');
+          if (s.isEmpty) return const EmptyState(icon: Glyph.noCards, title: 'ยังไม่มีบัตร/สินเชื่อ');
           _init(s);
           final a = _withoutEdited(s.byId(_accountId!) ?? s.accounts.first);
           // An edited payment keeps its type even where it is no longer offered.
@@ -373,7 +374,7 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
                 const SizedBox(height: 24),
                 FilledButton.icon(
                   onPressed: _saving ? null : () => _save(a),
-                  icon: const Icon(Icons.check),
+                  icon: const GlyphIcon(Glyph.done),
                   label: const Text('บันทึก'),
                 ),
               ],

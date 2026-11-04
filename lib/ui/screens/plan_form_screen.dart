@@ -17,6 +17,7 @@ import '../providers.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/form_fields.dart';
+import '../widgets/app_icons.dart';
 
 class PlanFormScreen extends ConsumerStatefulWidget {
   const PlanFormScreen({super.key, required this.account, this.existing});
@@ -343,7 +344,7 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
                           child: AmountField(controller: rate, label: 'ดอกเบี้ยต่อปี', suffix: '%', required: true),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.remove_circle_outline),
+                          icon: const GlyphIcon(Glyph.remove),
                           tooltip: 'ลบช่วงนี้',
                           onPressed: () => setState(() {
                             final removed = _steps.removeAt(i);
@@ -357,7 +358,7 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
                 Align(
                   alignment: Alignment.centerLeft,
                   child: TextButton.icon(
-                    icon: const Icon(Icons.add),
+                    icon: const GlyphIcon(Glyph.add),
                     label: const Text('เพิ่มช่วงดอกเบี้ย'),
                     onPressed: () => setState(() => _steps.add((TextEditingController(), TextEditingController()))),
                   ),
@@ -380,7 +381,7 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
                 Align(
                   alignment: Alignment.centerLeft,
                   child: TextButton.icon(
-                    icon: const Icon(Icons.calculate_outlined),
+                    icon: const GlyphIcon(Glyph.calculator),
                     label: const Text('ไม่รู้เงินต้น? คำนวณจากค่าผ่อนนี้'),
                     onPressed: _fillPrincipal,
                   ),
@@ -466,7 +467,7 @@ class _PlanFormScreenState extends ConsumerState<PlanFormScreen> {
                 onUse: (n) => setState(() => _paidBefore.text = '$n'),
               ),
             ],
-            SectionHeader('เงื่อนไขปิดก่อนกำหนด'),
+            SectionHeader('เงื่อนไขปิดก่อนกำหนด', icon: Glyph.earlyClosure),
             IntField(controller: _lockIn, label: 'ห้ามปิดก่อนกำหนด (lock-in)', suffix: 'เดือน', helper: '0 = ไม่มี', max: 600),
             formGap,
             Row(
@@ -603,7 +604,7 @@ class _PaidCheck extends StatelessWidget {
           if (warning != null)
             Row(
               children: [
-                Icon(Icons.warning_amber, size: 18, color: cs.warning),
+                GlyphIcon(Glyph.overdue, size: 18, color: cs.warning),
                 const SizedBox(width: 6),
                 Expanded(child: Text(warning, style: t.bodySmall?.copyWith(color: cs.warning))),
                 if (fix != p.paidBeforeTracking) TextButton(onPressed: () => onUse(fix), child: Text('ใส่ $fix')),

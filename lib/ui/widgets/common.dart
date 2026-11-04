@@ -189,7 +189,7 @@ class Pill extends StatelessWidget {
   const Pill(this.text, {super.key, this.color, this.icon});
   final String text;
   final Color? color;
-  final IconData? icon;
+  final Glyph? icon;
 
   @override
   Widget build(BuildContext context) {
@@ -203,7 +203,7 @@ class Pill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (icon != null) ...[Icon(icon, size: 14, color: c), const SizedBox(width: 4)],
+          if (icon != null) ...[GlyphIcon(icon!, size: 14, color: c), const SizedBox(width: 4)],
           Text(text, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: c)),
         ],
       ),
@@ -236,7 +236,7 @@ class UsageBar extends StatelessWidget {
 
 class EmptyState extends StatelessWidget {
   const EmptyState({super.key, required this.icon, required this.title, this.message, this.action});
-  final IconData icon;
+  final Glyph icon;
   final String title;
   final String? message;
   final Widget? action;
@@ -250,7 +250,7 @@ class EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 56, color: Theme.of(context).colorScheme.primary),
+            GlyphIcon(icon, size: 56, color: Theme.of(context).colorScheme.primary),
             const SizedBox(height: 12),
             Text(title, style: t.titleMedium, textAlign: TextAlign.center),
             if (message != null) ...[

@@ -9,6 +9,7 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/debt_chart.dart';
 import '../widgets/form_fields.dart';
+import '../widgets/app_icons.dart';
 
 /// "If I put X a month toward my debts, when am I debt-free?" — every
 /// balance at once, money above what is due going to the most expensive
@@ -67,7 +68,7 @@ class _PayoffPlanScreenState extends ConsumerState<PayoffPlanScreen> {
         builder: (s) {
           final debts = PayoffDebt.fromPortfolio(s);
           if (debts.isEmpty) {
-            return const EmptyState(icon: Icons.celebration_outlined, title: 'ไม่มีหนี้ค้างแล้ว');
+            return const EmptyState(icon: Glyph.celebrate, title: 'ไม่มีหนี้ค้างแล้ว');
           }
           final budget = parseAmount(_budget.text) ?? 0;
           final most = parseAmount(_max.text) ?? 0;
@@ -164,7 +165,7 @@ class _PayoffPlanScreenState extends ConsumerState<PayoffPlanScreen> {
                   comparedTo: plan,
                   allOut: true,
                 ),
-              const SectionHeader('ยอดหนี้รวมลดลงแบบนี้'),
+              const SectionHeader('ยอดหนี้รวมลดลงแบบนี้', icon: Glyph.chart),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: DebtChart(
@@ -186,7 +187,8 @@ class _PayoffPlanScreenState extends ConsumerState<PayoffPlanScreen> {
                   ],
                 ),
               ),
-              SectionHeader(identical(lead, plan) && second == null ? 'ลำดับที่จะหมด' : 'ลำดับที่จะหมด ($leadLabel)'),
+              SectionHeader(identical(lead, plan) && second == null ? 'ลำดับที่จะหมด' : 'ลำดับที่จะหมด ($leadLabel)',
+                  icon: Glyph.schedule),
               for (final (i, d) in order.indexed)
                 ListTile(
                   leading: CircleAvatar(radius: 14, child: Text('${i + 1}', style: t.labelMedium)),

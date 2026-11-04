@@ -13,6 +13,7 @@ import 'screens/settings_screen.dart';
 import 'theme.dart';
 import 'widgets/app_lock_gate.dart';
 import 'widgets/keyboard_dismiss.dart';
+import 'widgets/app_icons.dart';
 
 class DebtTrackerApp extends ConsumerWidget {
   const DebtTrackerApp({super.key});
@@ -125,11 +126,11 @@ class _HomeShellState extends ConsumerState<HomeShell> with WidgetsBindingObserv
         selectedIndex: _tab,
         onDestinationSelected: (i) => setState(() => _tab = i),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'ภาพรวม'),
-          NavigationDestination(icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month), label: 'ปฏิทิน'),
-          NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'ประวัติ'),
-          NavigationDestination(icon: Icon(Icons.calculate_outlined), selectedIcon: Icon(Icons.calculate), label: 'คำนวณโปะ'),
-          NavigationDestination(icon: Icon(Icons.settings_outlined), selectedIcon: Icon(Icons.settings), label: 'ตั้งค่า'),
+          NavigationDestination(icon: GlyphIcon(Glyph.home), selectedIcon: GlyphIcon(Glyph.home, filled: true), label: 'ภาพรวม'),
+          NavigationDestination(icon: GlyphIcon(Glyph.calendar), selectedIcon: GlyphIcon(Glyph.calendar, filled: true), label: 'ปฏิทิน'),
+          NavigationDestination(icon: GlyphIcon(Glyph.historyTab), selectedIcon: GlyphIcon(Glyph.historyTab, filled: true), label: 'ประวัติ'),
+          NavigationDestination(icon: GlyphIcon(Glyph.calculatorTab), selectedIcon: GlyphIcon(Glyph.calculatorTab, filled: true), label: 'คำนวณโปะ'),
+          NavigationDestination(icon: GlyphIcon(Glyph.settings), selectedIcon: GlyphIcon(Glyph.settings, filled: true), label: 'ตั้งค่า'),
         ],
       ),
     );

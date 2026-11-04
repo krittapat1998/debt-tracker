@@ -10,6 +10,7 @@ import '../../domain/models/spending.dart';
 import '../providers.dart';
 import '../widgets/common.dart';
 import 'account_detail_screen.dart';
+import '../widgets/app_icons.dart';
 
 enum _Kind { all, payments, spendings }
 
@@ -101,17 +102,17 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
               padding: const EdgeInsets.only(top: 48),
               child: switch (_kind) {
                 _Kind.all => const EmptyState(
-                    icon: Icons.receipt_long_outlined,
+                    icon: Glyph.history,
                     title: 'ยังไม่มีประวัติ',
                     message: 'การจ่ายและยอดใช้จ่ายที่บันทึกไว้จะแสดงที่นี่',
                   ),
                 _Kind.payments => const EmptyState(
-                    icon: Icons.receipt_long_outlined,
+                    icon: Glyph.pay,
                     title: 'ยังไม่มีประวัติการจ่าย',
                     message: 'กด "บันทึกการจ่าย" ทุกครั้งที่โอนเงินจ่ายบัตร/สินเชื่อ',
                   ),
                 _Kind.spendings => const EmptyState(
-                    icon: Icons.shopping_bag_outlined,
+                    icon: Glyph.spend,
                     title: 'ยังไม่มียอดใช้จ่าย',
                     message: 'กด "เพิ่มยอดใช้จ่าย" ในหน้าบัตรเมื่อรูดซื้อของ',
                   ),
@@ -125,6 +126,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
               month = startOfMonth(e.date);
               children.add(SectionHeader(
                 fmtMonthYear(month),
+                icon: Glyph.dueDate,
                 trailing: Text(
                   _monthTotals(entries.where((x) => isSameMonth(x.date, month!))),
                   textAlign: TextAlign.end,

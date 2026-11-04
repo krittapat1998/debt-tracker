@@ -70,7 +70,7 @@ class AccountDetailScreen extends ConsumerWidget {
       body: AsyncBody(
         value: portfolio,
         builder: (_) {
-          if (a == null) return EmptyState(icon: Glyph.notFound.data, title: 'ไม่พบข้อมูล');
+          if (a == null) return const EmptyState(icon: Glyph.notFound, title: 'ไม่พบข้อมูล');
           return ListView(
             padding: const EdgeInsets.only(bottom: 32),
             children: [
@@ -1054,7 +1054,7 @@ class _PlanCardState extends ConsumerState<_PlanCard> {
                   style: t.bodySmall?.copyWith(color: cs.error)),
             const SizedBox(height: 10),
             if (p.isClosed)
-              Pill('ปิดยอดแล้ว', color: cs.positive, icon: Glyph.paid.data)
+              Pill('ปิดยอดแล้ว', color: cs.positive, icon: Glyph.paid)
             else ...[
               Text(
                 '${plan.includedInStatement ? 'บัตรแจ้งแล้ว' : 'จ่ายแล้ว'} '

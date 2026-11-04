@@ -63,7 +63,7 @@ class DashboardScreen extends ConsumerWidget {
         builder: (s) {
           if (s.isEmpty) {
             return EmptyState(
-              icon: Glyph.creditCard.data,
+              icon: Glyph.creditCard,
               title: 'ยังไม่มีบัตรหรือสินเชื่อ',
               message: 'เพิ่มบัตรเครดิต บัตรกดเงินสด หรือสินเชื่อ เพื่อเริ่มติดตามยอดหนี้ ดอกเบี้ย และวันครบกำหนด',
               action: FilledButton.icon(
@@ -371,25 +371,34 @@ class _AccountCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // The name gets the whole line beside the badge; the rate sits below.
                         Text(a.account.name, style: t.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
-                        Text(
-                          [
-                            a.account.type.label,
-                            if (a.account.cardLast4 != null) '•••• ${a.account.cardLast4}',
-                            if (a.lines.length > 1) '${a.lines.length} วงเงินย่อย',
-                          ].join(' · '),
-                          style: t.bodySmall,
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                [
+                                  a.account.type.label,
+                                  if (a.account.cardLast4 != null) '•••• ${a.account.cardLast4}',
+                                  if (a.lines.length > 1) '${a.lines.length} วงเงินย่อย',
+                                ].join(' · '),
+                                style: t.bodySmall,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            AccountRateBadge(a: a, highlight: isMostExpensive),
+                          ],
                         ),
                       ],
                     ),
                   ),
-                  AccountRateBadge(a: a, highlight: isMostExpensive),
                 ],
               ),
               if (isMostExpensive)
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
-                  child: Pill('ดอกแพงสุด', color: cs.error, icon: Glyph.hottest.data),
+                  child: Pill('ดอกแพงสุด', color: cs.error, icon: Glyph.hottest),
                 ),
               const SizedBox(height: 12),
               Row(
