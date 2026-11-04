@@ -1,8 +1,12 @@
 # App Store listing: Debt Tracker 1.0
 
-Everything to paste into App Store Connect, field by field. Screenshots are in
-[`screenshots/`](screenshots/) (1320×2868, the 6.9" iPhone size; Apple scales them
-down for smaller iPhones). They use made-up data without bank or product names.
+Everything to paste into App Store Connect, field by field. Screenshots use made-up
+data without bank or product names:
+
+- [`screenshots/6.3-inch/`](screenshots/6.3-inch/) (1206×2622): the **required** slot,
+  "iPhone with Dynamic Island (medium display)". Apple scales these for other iPhones.
+- [`screenshots/6.9-inch/`](screenshots/6.9-inch/) (1320×2868): the optional large-display
+  slot, sharper on Pro Max phones.
 
 ## App information
 

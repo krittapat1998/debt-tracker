@@ -28,7 +28,10 @@ Regenerates the images in `docs/screenshots/` from the iOS Simulator (macOS only
 
    ```bash
    swift tool/screenshots/showcase.swift store store.png dashboard.png "เห็นหนี้ทั้งหมดในที่เดียว" "ยอดรวม ยอดต้องจ่ายเดือนนี้"
-   sips -s format jpeg -s formatOptions 92 store.png --out docs/app-store/screenshots/01-dashboard.jpg
+   sips -s format jpeg -s formatOptions 92 store.png --out docs/app-store/screenshots/6.9-inch/01-dashboard.jpg
+   sips -z 2622 1206 docs/app-store/screenshots/6.9-inch/01-dashboard.jpg --out docs/app-store/screenshots/6.3-inch/01-dashboard.jpg
    ```
+
+   App Store Connect requires the 6.3-inch size (1206×2622); the 6.9-inch set is optional.
 
    Add `dark` after the subline for the darker background.
