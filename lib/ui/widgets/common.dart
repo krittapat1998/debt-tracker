@@ -6,6 +6,7 @@ import '../../domain/finance/portfolio.dart';
 import '../../domain/models/enums.dart';
 import '../../domain/models/installment_plan.dart';
 import '../theme.dart';
+import 'app_icons.dart';
 
 /// Renders loading / error states for an [AsyncValue] uniformly.
 class AsyncBody<T> extends StatelessWidget {
@@ -30,9 +31,10 @@ class AsyncBody<T> extends StatelessWidget {
 }
 
 class SectionHeader extends StatelessWidget {
-  const SectionHeader(this.title, {super.key, this.trailing});
+  const SectionHeader(this.title, {super.key, this.trailing, this.icon});
   final String title;
   final Widget? trailing;
+  final Glyph? icon;
 
   @override
   Widget build(BuildContext context) {
@@ -40,6 +42,10 @@ class SectionHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 20, 12, 4),
       child: Row(
         children: [
+          if (icon != null) ...[
+            GlyphIcon(icon!, size: 18, color: Theme.of(context).colorScheme.primary),
+            const SizedBox(width: 6),
+          ],
           Expanded(
             child: Text(title,
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
@@ -56,12 +62,13 @@ class SectionHeader extends StatelessWidget {
 }
 
 class StatTile extends StatelessWidget {
-  const StatTile({super.key, required this.label, required this.value, this.caption, this.color});
+  const StatTile({super.key, required this.label, required this.value, this.caption, this.color, this.icon});
 
   final String label;
   final String value;
   final String? caption;
   final Color? color;
+  final Glyph? icon;
 
   @override
   Widget build(BuildContext context) {
@@ -70,7 +77,18 @@ class StatTile extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(label, style: t.labelMedium?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              GlyphIcon(icon!, size: 15, color: color ?? Theme.of(context).colorScheme.primary),
+              const SizedBox(width: 4),
+            ],
+            Flexible(
+              child: Text(label, style: t.labelMedium?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            ),
+          ],
+        ),
         const SizedBox(height: 2),
         Text(value, style: t.titleMedium?.copyWith(fontWeight: FontWeight.w600, color: color)),
         if (caption != null)

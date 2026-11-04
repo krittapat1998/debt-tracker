@@ -15,6 +15,7 @@ import '../../domain/models/payment.dart';
 import '../../domain/models/spending.dart';
 import '../providers.dart';
 import '../theme.dart';
+import '../widgets/app_icons.dart';
 import '../widgets/card_colors.dart';
 import '../widgets/common.dart';
 import '../widgets/form_fields.dart';
@@ -69,21 +70,22 @@ class AccountDetailScreen extends ConsumerWidget {
       body: AsyncBody(
         value: portfolio,
         builder: (_) {
-          if (a == null) return const EmptyState(icon: Icons.search_off, title: 'ไม่พบข้อมูล');
+          if (a == null) return EmptyState(icon: Glyph.notFound.data, title: 'ไม่พบข้อมูล');
           return ListView(
             padding: const EdgeInsets.only(bottom: 32),
             children: [
               _DueCard(a: a),
               _QuickActions(a: a),
               CardColorTheme(color: a.account.color, child: _OverviewCard(a: a)),
-              SectionHeader(a.lines.length > 1 ? 'วงเงินย่อย (${a.lines.length})' : 'วงเงิน'),
+              SectionHeader(a.lines.length > 1 ? 'วงเงินย่อย (${a.lines.length})' : 'วงเงิน', icon: Glyph.limit),
               for (final l in a.lines) _LineTile(a: a, line: l),
               if (a.lines.isNotEmpty) _RecurringSection(a: a),
               if (a.spendings.isNotEmpty) _SpendingSection(a: a),
               SectionHeader(
                 'รายการผ่อน',
+                icon: Glyph.installments,
                 trailing: TextButton.icon(
-                  icon: const Icon(Icons.add),
+                  icon: const GlyphIcon(Glyph.add),
                   label: const Text('เพิ่ม'),
                   onPressed: () => Navigator.push(
                     context,
@@ -97,7 +99,7 @@ class AccountDetailScreen extends ConsumerWidget {
                   child: Text('ยังไม่มีรายการผ่อน — เพิ่มได้ทั้งของที่ผ่อน 0% และสินเชื่อก้อนที่ผ่อนเป็นงวด'),
                 ),
               for (final p in a.plans) _PlanCard(a: a, p: p),
-              SectionHeader('ประวัติการจ่าย (${a.payments.length})'),
+              SectionHeader('ประวัติการจ่าย (${a.payments.length})', icon: Glyph.history),
               if (a.payments.isEmpty)
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 20, vertical: 4),
@@ -156,7 +158,7 @@ class _DueCard extends StatelessWidget {
             if (first != null)
               Row(
                 children: [
-                  Icon(overdue ? Icons.warning_amber : Icons.event, color: accent),
+                  GlyphIcon(overdue ? Glyph.overdue : Glyph.dueDate, color: accent),
                   const SizedBox(width: 8),
                   Expanded(child: Text('${overdue ? 'เลยกำหนดจ่าย' : 'ต้องจ่ายภายใน'} ${fmtDate(first)}', style: headline)),
                   Pill(fmtRelativeDays(days!), color: accent),
@@ -165,8 +167,8 @@ class _DueCard extends StatelessWidget {
             else
               Row(
                 children: [
-                  Icon(
-                    !hasStatement && acc.type == AccountType.creditCard ? Icons.info_outline : Icons.check_circle,
+                  GlyphIcon(
+                    !hasStatement && acc.type == AccountType.creditCard ? Glyph.info : Glyph.paid,
                     color: !hasStatement && acc.type == AccountType.creditCard ? fg : cs.positive,
                   ),
                   const SizedBox(width: 8),
@@ -186,8 +188,12 @@ class _DueCard extends StatelessWidget {
               const SizedBox(height: 12),
               Row(
                 children: [
-                  Expanded(child: StatTile(label: 'ขั้นต่ำ${on(stmtDue)}', value: fmtMoney(a.minimumOutstanding), color: fg)),
-                  Expanded(child: StatTile(label: 'หรือจ่ายเต็มยอด', value: fmtMoney(a.statementOutstanding), color: fg)),
+                  Expanded(
+                    child: StatTile(
+                        icon: Glyph.minimum, label: 'ขั้นต่ำ${on(stmtDue)}', value: fmtMoney(a.minimumOutstanding), color: fg)),
+                  Expanded(
+                    child: StatTile(
+                        icon: Glyph.paidInFull, label: 'หรือจ่ายเต็มยอด', value: fmtMoney(a.statementOutstanding), color: fg)),
                 ],
               ),
               if (a.paidTowardStatement > 0.005)
@@ -240,10 +246,10 @@ class _QuickActions extends ConsumerWidget {
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
     );
-    Widget action(IconData icon, String label, VoidCallback? onPressed, {bool primary = false}) {
+    Widget action(Glyph icon, String label, VoidCallback? onPressed, {bool primary = false}) {
       final child = Column(
         mainAxisSize: MainAxisSize.min,
-        children: [Icon(icon), const SizedBox(height: 4), Text(label, textAlign: TextAlign.center)],
+        children: [GlyphIcon(icon), const SizedBox(height: 4), Text(label, textAlign: TextAlign.center)],
       );
       return Expanded(
         child: primary
@@ -258,7 +264,7 @@ class _QuickActions extends ConsumerWidget {
         spacing: 8,
         children: [
           action(
-            Icons.payments_outlined,
+            Glyph.pay,
             'บันทึกการจ่าย',
             () => Navigator.push(
               context,
@@ -267,11 +273,11 @@ class _QuickActions extends ConsumerWidget {
             primary: true,
           ),
           action(
-            a.account.type == AccountType.cashCard ? Icons.local_atm : Icons.add_shopping_cart,
+            a.account.type == AccountType.cashCard ? Glyph.withdraw : Glyph.spend,
             'เพิ่มยอด${a.account.type.spendingWord}',
             a.lines.isEmpty ? null : () => _spendingDialog(context, ref, a),
           ),
-          action(Icons.edit_note, 'อัปเดตยอดบิล', () => showStatementSheet(context, a)),
+          action(Glyph.statement, 'อัปเดตยอดบิล', () => showStatementSheet(context, a)),
         ],
       ),
     );
@@ -295,6 +301,8 @@ class _OverviewCard extends StatelessWidget {
           children: [
             Row(
               children: [
+                AccountBadge(a.account.type, size: 44),
+                const SizedBox(width: 12),
                 Expanded(
                   child: StatTile(label: 'ยอดคงค้างทั้งหมด', value: fmtMoney(a.totalDebt)),
                 ),
@@ -306,9 +314,15 @@ class _OverviewCard extends StatelessWidget {
               spacing: 24,
               runSpacing: 10,
               children: [
-                StatTile(label: a.account.type.revolvingLabel, value: fmtMoney(a.revolvingBalance)),
-                if (a.plans.isNotEmpty) StatTile(label: 'ยอดผ่อน', value: fmtMoney(a.installmentBalance)),
                 StatTile(
+                  icon: a.account.type == AccountType.cashCard ? Glyph.withdraw : Glyph.spend,
+                  label: a.account.type.revolvingLabel,
+                  value: fmtMoney(a.revolvingBalance),
+                ),
+                if (a.plans.isNotEmpty)
+                  StatTile(icon: Glyph.installments, label: 'ยอดผ่อน', value: fmtMoney(a.installmentBalance)),
+                StatTile(
+                  icon: Glyph.interest,
                   label: 'ดอกราว/เดือน',
                   value: fmtMoney(interest),
                   color: interest > 0.005 ? cs.error : null,
@@ -397,7 +411,7 @@ class _LineTile extends ConsumerWidget {
               const SizedBox(height: 6),
               Row(
                 children: [
-                  Icon(Icons.edit_outlined, size: 14, color: muted),
+                  GlyphIcon(Glyph.edit, size: 14, color: muted),
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
@@ -609,8 +623,9 @@ class _RecurringSection extends ConsumerWidget {
       children: [
         SectionHeader(
           a.recurring.isEmpty ? 'รายการหักประจำ' : 'รายการหักประจำ (${a.recurring.length})',
+          icon: Glyph.recurring,
           trailing: TextButton.icon(
-            icon: const Icon(Icons.add),
+            icon: const GlyphIcon(Glyph.add),
             label: const Text('เพิ่ม'),
             onPressed: () => _recurringDialog(context, ref, a),
           ),
@@ -647,7 +662,7 @@ class _RecurringTile extends ConsumerWidget {
     return ListTile(
       leading: CircleAvatar(
         backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-        child: const Icon(Icons.autorenew, size: 20),
+        child: const GlyphIcon(Glyph.recurring, size: 20),
       ),
       title: Text('${fmtMoney(c.amount)} · ${c.name}'),
       subtitle: Text([
@@ -884,6 +899,7 @@ class _SpendingSectionState extends State<_SpendingSection> {
       children: [
         SectionHeader(
           'ประวัติการ${widget.a.account.type.spendingWord} (${all.length})',
+          icon: widget.a.account.type == AccountType.cashCard ? Glyph.withdraw : Glyph.spend,
           trailing: all.length <= _collapsedCount
               ? null
               : TextButton(
@@ -928,7 +944,7 @@ class SpendingTile extends ConsumerWidget {
     return ListTile(
       leading: CircleAvatar(
         backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-        child: Icon(type == AccountType.cashCard ? Icons.local_atm : Icons.shopping_bag_outlined, size: 20),
+        child: GlyphIcon(type == AccountType.cashCard ? Glyph.withdraw : Glyph.spend, size: 20),
       ),
       title: Text('${fmtMoney(s.amount)} · ${s.note ?? type.spendingWord}'),
       subtitle: Text([fmtDate(s.date), if (details.isNotEmpty) details.join(' · ')].join('\n')),
@@ -1038,7 +1054,7 @@ class _PlanCardState extends ConsumerState<_PlanCard> {
                   style: t.bodySmall?.copyWith(color: cs.error)),
             const SizedBox(height: 10),
             if (p.isClosed)
-              Pill('ปิดยอดแล้ว', color: cs.positive, icon: Icons.check_circle)
+              Pill('ปิดยอดแล้ว', color: cs.positive, icon: Glyph.paid.data)
             else ...[
               Text(
                 '${plan.includedInStatement ? 'บัตรแจ้งแล้ว' : 'จ่ายแล้ว'} '
@@ -1074,7 +1090,7 @@ class _PlanCardState extends ConsumerState<_PlanCard> {
                       padding: const EdgeInsets.only(top: 2),
                       child: Row(
                         children: [
-                          Icon(Icons.info_outline, size: 14, color: cs.onSurfaceVariant),
+                          GlyphIcon(Glyph.info, size: 14, color: cs.onSurfaceVariant),
                           const SizedBox(width: 4),
                           Expanded(
                             child: Text(
@@ -1107,7 +1123,7 @@ class _PlanCardState extends ConsumerState<_PlanCard> {
                     Align(
                       alignment: Alignment.centerLeft,
                       child: TextButton.icon(
-                        icon: const Icon(Icons.table_rows_outlined),
+                        icon: const GlyphIcon(Glyph.schedule),
                         label: const Text('ดูตารางผ่อนทุกงวด'),
                         onPressed: () => Navigator.push(context,
                             MaterialPageRoute(builder: (_) => ScheduleScreen(accountId: a.account.id, planId: plan.id))),
@@ -1121,14 +1137,14 @@ class _PlanCardState extends ConsumerState<_PlanCard> {
               children: [
                 TextButton.icon(
                   style: compact,
-                  icon: Icon(_expanded ? Icons.expand_less : Icons.expand_more),
+                  icon: GlyphIcon(_expanded ? Glyph.collapse : Glyph.expand),
                   label: Text(_expanded ? 'ซ่อน' : 'รายละเอียด'),
                   onPressed: () => setState(() => _expanded = !_expanded),
                 ),
                 if (!p.isClosed)
                   TextButton.icon(
                     style: compact,
-                    icon: const Icon(Icons.calculate_outlined),
+                    icon: const GlyphIcon(Glyph.calculator),
                     label: const Text('คำนวณโปะ'),
                     onPressed: () => Navigator.push(
                         context, MaterialPageRoute(builder: (_) => CalculatorScreen(initialPlanId: plan.id))),
@@ -1136,7 +1152,7 @@ class _PlanCardState extends ConsumerState<_PlanCard> {
                 if (!p.isClosed && !plan.includedInStatement)
                   TextButton.icon(
                     style: compact,
-                    icon: const Icon(Icons.check),
+                    icon: const GlyphIcon(Glyph.done),
                     label: const Text('จ่ายงวดนี้'),
                     onPressed: () => Navigator.push(
                       context,
@@ -1189,16 +1205,7 @@ class PaymentTile extends ConsumerWidget {
     return ListTile(
       leading: CircleAvatar(
         backgroundColor: p.type == PaymentType.extra ? cs.tertiaryContainer : cs.secondaryContainer,
-        child: Icon(
-          switch (p.type) {
-            PaymentType.extra => Icons.rocket_launch_outlined,
-            PaymentType.installment => Icons.event_repeat,
-            PaymentType.full => Icons.done_all,
-            PaymentType.minimum => Icons.south,
-            PaymentType.other => Icons.payments_outlined,
-          },
-          size: 20,
-        ),
+        child: GlyphIcon(Glyph.forPayment(p.type), size: 20),
       ),
       title: Text('${fmtMoney(p.amount)} · ${p.type.label}'),
       subtitle: Text([fmtDate(p.date), if (details.isNotEmpty) details.join(' · ')].join('\n')),
