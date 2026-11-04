@@ -36,9 +36,10 @@
     <td align="center"><img src="docs/screenshots/calculator.png" alt="คำนวณโปะ"><br><b>คำนวณโปะ</b><br><sub>ลดค่างวด หรือผ่อนเท่าเดิมแต่ปิดเร็วขึ้น</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/screenshots/dark-dashboard.png" alt="โหมดมืด ภาพรวม"><br><b>โหมดมืด</b><br><sub>ธีมสว่าง มืด น้ำเงิน หรือตามเครื่อง</sub></td>
+    <td align="center"><img src="docs/screenshots/dark-dashboard.png" alt="โหมดมืด ภาพรวม"><br><b>โหมดมืด</b><br><sub>ภาพรวม</sub></td>
+    <td align="center"><img src="docs/screenshots/dark-payoff-plan.png" alt="โหมดมืด แผนปลดหนี้"><br><b>โหมดมืด</b><br><sub>แผนปลดหนี้</sub></td>
     <td align="center"><img src="docs/screenshots/dark-calendar.png" alt="โหมดมืด ปฏิทิน"><br><b>โหมดมืด</b><br><sub>ปฏิทินครบกำหนด</sub></td>
-    <td colspan="2"></td>
+    <td align="center"><img src="docs/screenshots/dark-settings.png" alt="ตั้งค่า"><br><b>ตั้งค่า</b><br><sub>ธีมสว่าง มืด น้ำเงิน แจ้งเตือน Face ID สำรองข้อมูล</sub></td>
   </tr>
 </table>
 
