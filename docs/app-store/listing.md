@@ -75,7 +75,7 @@ data without bank or product names:
 |---|---|
 | Support URL | https://kritdev.com |
 | Marketing URL (optional) | https://github.com/krittapat1998/debt-tracker |
-| Privacy Policy URL | https://kritdev.com/debt-tracker/privacy (host [`docs/privacy/index.html`](../privacy/index.html) there first) |
+| Privacy Policy URL | https://krittapat1998.github.io/debt-tracker/privacy/ (GitHub Pages serves [`docs/`](../), so this is [`docs/privacy/index.html`](../privacy/index.html)) |
 | Copyright | 2026 Krittapat Seangsomjai |
 | Build | 1.0.0 (15) or later |
 
