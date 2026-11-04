@@ -17,6 +17,7 @@ import '../widgets/common.dart';
 import '../widgets/form_fields.dart';
 import 'payment_form_screen.dart';
 import 'payoff_plan_screen.dart';
+import '../widgets/app_icons.dart';
 
 /// "If I prepay X, how much interest do I save?" — reduce the installment
 /// vs keep it and finish sooner.
@@ -99,10 +100,10 @@ class _CalculatorScreenState extends ConsumerState<CalculatorScreen> {
               Card(
                 margin: EdgeInsets.zero,
                 child: ListTile(
-                  leading: const Icon(Icons.flag_outlined),
+                  leading: const GlyphIcon(Glyph.debtFree),
                   title: const Text('แผนปลดหนี้ทั้งหมด'),
-                  subtitle: const Text('โปะเพิ่มเดือนละเท่าไร หนี้ทุกก้อนจะหมดเมื่อไร'),
-                  trailing: const Icon(Icons.chevron_right),
+                  subtitle: const Text('จ่ายหนี้ได้เดือนละเท่าไร หนี้ทุกก้อนจะหมดเมื่อไร'),
+                  trailing: const GlyphIcon(Glyph.next),
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PayoffPlanScreen())),
                 ),
               ),
@@ -367,7 +368,7 @@ class _OutcomeCard extends StatelessWidget {
             Row(
               children: [
                 Expanded(child: Text(o.mode.label, style: t.titleSmall)),
-                if (isBest) Pill('ประหยัดดอกกว่า', color: cs.positive, icon: Icons.star),
+                if (isBest) Pill('ประหยัดดอกกว่า', color: cs.positive, icon: Glyph.best),
               ],
             ),
             const SizedBox(height: 8),

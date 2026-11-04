@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_icons.dart';
 
 /// Colors a card can be painted in (cards like the bank's own).
 const cardColors = <(String, Color)>[
@@ -75,7 +76,7 @@ class CardColorPicker extends StatelessWidget {
               shape: BoxShape.circle,
               border: Border.all(color: selected ? cs.primary : cs.outlineVariant, width: selected ? 3 : 1),
             ),
-            child: selected ? Icon(Icons.check, size: 18, color: check) : icon,
+            child: selected ? GlyphIcon(Glyph.done, size: 18, color: check) : icon,
           ),
         ),
       );
@@ -90,7 +91,7 @@ class CardColorPicker extends StatelessWidget {
           selected: value == null,
           tip: 'ตามธีม',
           pick: null,
-          icon: Icon(Icons.format_color_reset, size: 18, color: cs.onSurfaceVariant),
+          icon: GlyphIcon(Glyph.noColor, size: 18, color: cs.onSurfaceVariant),
         ),
         for (final (name, c) in cardColors)
           dot(fill: c, selected: value == c.toARGB32(), tip: name, pick: c.toARGB32()),

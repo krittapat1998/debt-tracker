@@ -8,6 +8,7 @@ import '../providers.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'account_detail_screen.dart';
+import '../widgets/app_icons.dart';
 
 /// Every card and loan on one month: when bills and installments are due,
 /// cutoffs, and recurring charges. Tap a day to see just that day.
@@ -39,13 +40,6 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
     };
   }
 
-  IconData _icon(DueEventKind k) => switch (k) {
-        DueEventKind.cardDue => Icons.credit_card,
-        DueEventKind.installment => Icons.event_repeat,
-        DueEventKind.cutoff => Icons.content_cut,
-        DueEventKind.recurring => Icons.autorenew,
-      };
-
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -76,9 +70,9 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 child: Row(
                   children: [
-                    IconButton(icon: const Icon(Icons.chevron_left), tooltip: 'เดือนก่อน', onPressed: () => _shift(-1)),
+                    IconButton(icon: const GlyphIcon(Glyph.previous), tooltip: 'เดือนก่อน', onPressed: () => _shift(-1)),
                     Expanded(child: Text(fmtMonthYear(first), textAlign: TextAlign.center, style: t.titleMedium)),
-                    IconButton(icon: const Icon(Icons.chevron_right), tooltip: 'เดือนถัดไป', onPressed: () => _shift(1)),
+                    IconButton(icon: const GlyphIcon(Glyph.next), tooltip: 'เดือนถัดไป', onPressed: () => _shift(1)),
                   ],
                 ),
               ),
@@ -150,6 +144,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
               ),
               SectionHeader(
                 _selected == null ? 'ทั้งเดือน' : fmtDate(_selected!),
+                icon: Glyph.dueDate,
                 trailing: _selected == null
                     ? null
                     : TextButton(onPressed: () => setState(() => _selected = null), child: const Text('ดูทั้งเดือน')),
@@ -164,7 +159,7 @@ class _CalendarScreenState extends ConsumerState<CalendarScreen> {
                   leading: CircleAvatar(
                     radius: 18,
                     backgroundColor: _color(context, e).withValues(alpha: 0.15),
-                    child: Icon(_icon(e.kind), size: 18, color: _color(context, e)),
+                    child: GlyphIcon(Glyph.forDueEvent(e.kind), size: 18, color: _color(context, e)),
                   ),
                   title: Text(e.title),
                   subtitle: Text([

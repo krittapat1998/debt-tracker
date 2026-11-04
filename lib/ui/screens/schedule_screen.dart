@@ -7,6 +7,7 @@ import '../../domain/finance/loan_state.dart';
 import '../providers.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/app_icons.dart';
 
 /// Full amortization table: paid installments followed by the projection.
 class ScheduleScreen extends ConsumerWidget {
@@ -27,7 +28,7 @@ class ScheduleScreen extends ConsumerWidget {
         value: portfolio,
         builder: (_) {
           final s = state;
-          if (s == null) return const EmptyState(icon: Icons.search_off, title: 'ไม่พบรายการผ่อน');
+          if (s == null) return const EmptyState(icon: Glyph.notFound, title: 'ไม่พบรายการผ่อน');
           final rows = s.fullSchedule;
           final cs = Theme.of(context).colorScheme;
           return ListView.builder(
@@ -79,7 +80,7 @@ class _RowTile extends StatelessWidget {
           radius: 16,
           backgroundColor: paid ? cs.primary : cs.surfaceContainerHighest,
           child: paid
-              ? Icon(Icons.check, size: 16, color: cs.onPrimary)
+              ? GlyphIcon(Glyph.done, size: 16, color: cs.onPrimary)
               : Text('${row.number}', style: t.labelSmall),
         ),
         title: Text(

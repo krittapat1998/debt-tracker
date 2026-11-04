@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers.dart';
+import 'app_icons.dart';
 
 /// Covers the whole app (every route) with a lock screen while the app lock
 /// is on: at start, and when the app comes back after [relockAfter] away.
@@ -95,7 +96,7 @@ class _LockScreen extends StatelessWidget {
               const SizedBox(height: 24),
               FilledButton.icon(
                 onPressed: onUnlock,
-                icon: const Icon(Icons.lock_open),
+                icon: const GlyphIcon(Glyph.unlock),
                 label: const Text('ปลดล็อก'),
               ),
             ],

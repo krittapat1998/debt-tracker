@@ -14,6 +14,7 @@ import '../providers.dart';
 import '../widgets/common.dart';
 import 'sms_import_screen.dart';
 import 'sms_patterns_screen.dart';
+import '../widgets/app_icons.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -34,7 +35,7 @@ class SettingsScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.only(bottom: 32),
         children: [
-          const SectionHeader('ธีม'),
+          const SectionHeader('ธีม', icon: Glyph.theme),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Wrap(
@@ -56,8 +57,9 @@ class SettingsScreen extends ConsumerWidget {
             padding: EdgeInsets.fromLTRB(16, 4, 16, 0),
             child: Text('ตามระบบ = สว่างหรือมืดตามการตั้งค่าของเครื่อง'),
           ),
-          const SectionHeader('การแจ้งเตือน'),
+          const SectionHeader('การแจ้งเตือน', icon: Glyph.notifications),
           SwitchListTile(
+            secondary: const GlyphIcon(Glyph.dueDate),
             title: const Text('เตือนวันครบกำหนดชำระ'),
             subtitle: const Text('ตามจำนวนวันล่วงหน้าที่ตั้งไว้ในแต่ละบัตร และในวันครบกำหนด'),
             value: prefs.enabled,
@@ -67,6 +69,7 @@ class SettingsScreen extends ConsumerWidget {
             },
           ),
           SwitchListTile(
+            secondary: const GlyphIcon(Glyph.cutoff),
             title: const Text('เตือนวันตัดรอบบิล'),
             subtitle: const Text('ให้อัปเดตยอดเรียกเก็บเมื่อได้รับใบแจ้งยอด'),
             value: prefs.billingReminders,
@@ -76,6 +79,7 @@ class SettingsScreen extends ConsumerWidget {
           ),
           ListTile(
             enabled: prefs.enabled,
+            leading: const GlyphIcon(Glyph.clock),
             title: const Text('เวลาแจ้งเตือน'),
             trailing: Text('${prefs.hour.toString().padLeft(2, '0')}:00'),
             onTap: () async {
@@ -86,7 +90,7 @@ class SettingsScreen extends ConsumerWidget {
             },
           ),
           ListTile(
-            leading: const Icon(Icons.notifications_active_outlined),
+            leading: const GlyphIcon(Glyph.testNotification),
             title: const Text('ทดสอบการแจ้งเตือน'),
             subtitle: const Text('ขอสิทธิ์ (ถ้ายังไม่ได้ให้) แล้วส่งการแจ้งเตือนตัวอย่างทันที'),
             onTap: () async {
@@ -101,43 +105,43 @@ class SettingsScreen extends ConsumerWidget {
               }
             },
           ),
-          const SectionHeader('SMS ธนาคาร'),
+          const SectionHeader('SMS ธนาคาร', icon: Glyph.sms),
           ListTile(
-            leading: const Icon(Icons.sms_outlined),
+            leading: const GlyphIcon(Glyph.sms),
             title: const Text('นำเข้ายอดจาก SMS'),
             subtitle: Text(Platform.isAndroid ? 'อ่าน SMS อัตโนมัติ หรือวางข้อความ' : 'วางข้อความ SMS ให้แอพอ่านยอด'),
-            trailing: const Icon(Icons.chevron_right),
+            trailing: const GlyphIcon(Glyph.next),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SmsImportScreen())),
           ),
           ListTile(
-            leading: const Icon(Icons.rule),
+            leading: const GlyphIcon(Glyph.smsRules),
             title: const Text('ทดสอบการอ่าน SMS ธนาคาร'),
             subtitle: const Text('ลองว่าแอพอ่านข้อความจากธนาคารของคุณได้ไหม'),
-            trailing: const Icon(Icons.chevron_right),
+            trailing: const GlyphIcon(Glyph.next),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SmsPatternsScreen())),
           ),
-          const SectionHeader('สำรองข้อมูล'),
+          const SectionHeader('สำรองข้อมูล', icon: Glyph.backup),
           ListTile(
-            leading: const Icon(Icons.lock_outline),
+            leading: const GlyphIcon(Glyph.lockedBackup),
             title: const Text('สำรองข้อมูลทั้งหมด'),
             subtitle: const Text('ได้ไฟล์ไว้กู้คืนหรือย้ายเครื่อง ตั้งรหัสผ่านล็อกไฟล์ได้ ควรตั้งก่อนเก็บไว้ใน iCloud หรือ Google Drive'),
             onTap: () => _exportJson(context, ref),
           ),
           ListTile(
-            leading: const Icon(Icons.table_chart_outlined),
+            leading: const GlyphIcon(Glyph.spreadsheet),
             title: const Text('ส่งออกเป็นตาราง'),
             subtitle: const Text('เปิดดูใน Excel หรือ Google Sheets (ไฟล์นี้ไม่มีรหัสผ่าน)'),
             onTap: () => _exportCsv(context, ref),
           ),
           ListTile(
-            leading: const Icon(Icons.restore),
+            leading: const GlyphIcon(Glyph.restore),
             title: const Text('กู้คืนจากไฟล์สำรอง'),
             subtitle: const Text('แทนที่ข้อมูลทั้งหมดในเครื่องนี้'),
             onTap: () => _restore(context, ref),
           ),
-          const SectionHeader('ความเป็นส่วนตัว'),
+          const SectionHeader('ความเป็นส่วนตัว', icon: Glyph.privacy),
           SwitchListTile(
-            secondary: const Icon(Icons.lock_person_outlined),
+            secondary: const GlyphIcon(Glyph.appLock),
             title: Text('ล็อกแอพด้วย ${Platform.isIOS ? 'Face ID' : 'สแกนนิ้ว'}'),
             subtitle: const Text('ตอนเปิดแอพ และเมื่อกลับมาหลังออกไปเกิน 1 นาที ต้องยืนยันตัวตนหรือใส่รหัสเครื่องก่อน'),
             value: ref.watch(appLockProvider),
@@ -151,14 +155,14 @@ class SettingsScreen extends ConsumerWidget {
               'จึงควรตั้งรหัสผ่านทุกครั้งก่อนเก็บไว้นอกเครื่อง',
             ),
           ),
-          const SectionHeader('เกี่ยวกับแอพ'),
+          const SectionHeader('เกี่ยวกับแอพ', icon: Glyph.about),
           ListTile(
-            leading: const Icon(Icons.info_outline),
+            leading: const GlyphIcon(Glyph.about),
             title: const Text('Debt Tracker'),
             subtitle: Text('เวอร์ชัน ${ref.watch(appVersionProvider).valueOrNull ?? '-'}'),
           ),
           const ListTile(
-            leading: Icon(Icons.code),
+            leading: GlyphIcon(Glyph.developer),
             title: Text('พัฒนาโดย Kritdev.com'),
           ),
         ],
@@ -302,7 +306,7 @@ class _ThemeSwatch extends StatelessWidget {
   Widget build(BuildContext context) {
     final border = Border.all(color: Theme.of(context).colorScheme.outline);
     return switch (choice) {
-      ThemeChoice.system => const Icon(Icons.brightness_auto, size: 18),
+      ThemeChoice.system => const GlyphIcon(Glyph.autoTheme, size: 18),
       ThemeChoice.light => Container(decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, border: border)),
       ThemeChoice.dark => Container(decoration: BoxDecoration(color: const Color(0xFF111418), shape: BoxShape.circle, border: border)),
       ThemeChoice.blue => Container(decoration: BoxDecoration(color: const Color(0xFF1150C8), shape: BoxShape.circle, border: border)),

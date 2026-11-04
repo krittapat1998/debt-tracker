@@ -7,6 +7,7 @@ import '../../domain/finance/payoff_plan.dart';
 import '../../domain/finance/portfolio.dart';
 import '../providers.dart';
 import '../theme.dart';
+import '../widgets/app_icons.dart';
 import '../widgets/card_colors.dart';
 import '../widgets/common.dart';
 import 'account_detail_screen.dart';
@@ -33,14 +34,14 @@ class DashboardScreen extends ConsumerWidget {
             icon: Badge(
               isLabelVisible: pending.isNotEmpty,
               label: Text('${pending.length}'),
-              child: const Icon(Icons.sms_outlined),
+              child: const GlyphIcon(Glyph.sms),
             ),
             label: const Text('นำเข้า SMS'),
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SmsImportScreen())),
           ),
           TextButton.icon(
             style: _compact,
-            icon: const Icon(Icons.add_card_outlined),
+            icon: const GlyphIcon(Glyph.addCard),
             label: const Text('เพิ่มบัตร'),
             onPressed: () => openNewAccount(context),
           ),
@@ -49,7 +50,7 @@ class DashboardScreen extends ConsumerWidget {
       ),
       floatingActionButton: hasAccounts
           ? FloatingActionButton.extended(
-              icon: const Icon(Icons.payments_outlined),
+              icon: const GlyphIcon(Glyph.pay),
               label: const Text('บันทึกการจ่าย'),
               onPressed: () => Navigator.push(
                 context,
@@ -62,12 +63,12 @@ class DashboardScreen extends ConsumerWidget {
         builder: (s) {
           if (s.isEmpty) {
             return EmptyState(
-              icon: Icons.credit_card,
+              icon: Glyph.creditCard,
               title: 'ยังไม่มีบัตรหรือสินเชื่อ',
               message: 'เพิ่มบัตรเครดิต บัตรกดเงินสด หรือสินเชื่อ เพื่อเริ่มติดตามยอดหนี้ ดอกเบี้ย และวันครบกำหนด',
               action: FilledButton.icon(
                 onPressed: () => openNewAccount(context),
-                icon: const Icon(Icons.add),
+                icon: const GlyphIcon(Glyph.add),
                 label: const Text('เพิ่มรายการแรก'),
               ),
             );
@@ -81,7 +82,7 @@ class DashboardScreen extends ConsumerWidget {
                 _SummaryCard(s: s),
                 if (s.nextDue != null) _NextDueCard(a: s.nextDue!),
                 if (s.recommendedTarget != null) _AvalancheCard(s: s),
-                const SectionHeader('บัตร/สินเชื่อ · เรียงตามวันครบกำหนด'),
+                const SectionHeader('บัตร/สินเชื่อ · เรียงตามวันครบกำหนด', icon: Glyph.creditCard),
                 for (final a in s.byDueDate)
                   CardColorTheme(
                     color: a.account.color,
@@ -112,12 +113,12 @@ class _PendingBanner extends StatelessWidget {
     return Card(
       color: cs.tertiaryContainer,
       child: ListTile(
-        leading: Icon(Icons.mark_email_unread_outlined, color: cs.onTertiaryContainer),
+        leading: GlyphIcon(Glyph.inbox, color: cs.onTertiaryContainer),
         title: Text('มีข้อความจากธนาคารรอยืนยัน $count รายการ',
             style: TextStyle(color: cs.onTertiaryContainer)),
         subtitle: Text('ตรวจสอบก่อนบันทึก เพื่อกันการอ่านยอดผิด',
             style: TextStyle(color: cs.onTertiaryContainer)),
-        trailing: Icon(Icons.chevron_right, color: cs.onTertiaryContainer),
+        trailing: GlyphIcon(Glyph.next, color: cs.onTertiaryContainer),
         onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SmsImportScreen())),
       ),
     );
@@ -147,7 +148,13 @@ class _SummaryCard extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('ยอดหนี้รวมทั้งหมด', style: t.labelLarge?.copyWith(color: cs.onPrimaryContainer)),
+            Row(
+              children: [
+                GlyphIcon(Glyph.totalDebt, size: 18, color: cs.onPrimaryContainer),
+                const SizedBox(width: 6),
+                Text('ยอดหนี้รวมทั้งหมด', style: t.labelLarge?.copyWith(color: cs.onPrimaryContainer)),
+              ],
+            ),
             const SizedBox(height: 4),
             Text(fmtMoney(s.totalDebt),
                 style: t.headlineMedium?.copyWith(color: cs.onPrimaryContainer, fontWeight: FontWeight.bold)),
@@ -161,6 +168,7 @@ class _SummaryCard extends ConsumerWidget {
               runSpacing: 14,
               children: [
                 StatTile(
+                  icon: Glyph.dueThisMonth,
                   label: 'ต้องจ่ายเดือนนี้',
                   value: fmtMoney(due.gross),
                   caption: due.remaining <= 0.005
@@ -169,8 +177,14 @@ class _SummaryCard extends ConsumerWidget {
                           ? 'ยังเหลือ ${fmtMoney(due.remaining)}'
                           : 'ขั้นต่ำบัตร + ค่าผ่อน',
                 ),
-                StatTile(label: 'จ่ายไปแล้วเดือนนี้', value: fmtMoney(s.paidThisMonth), color: cs.positive),
                 StatTile(
+                  icon: Glyph.paid,
+                  label: 'จ่ายไปแล้วเดือนนี้',
+                  value: fmtMoney(s.paidThisMonth),
+                  color: cs.positive,
+                ),
+                StatTile(
+                  icon: Glyph.interest,
                   label: 'ดอกเบี้ยโดยประมาณ/เดือน',
                   value: fmtMoney(s.estimatedMonthlyInterest),
                   color: cs.error,
@@ -183,7 +197,7 @@ class _SummaryCard extends ConsumerWidget {
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PayoffPlanScreen())),
                 child: Row(
                   children: [
-                    Icon(Icons.flag_outlined, size: 18, color: cs.onPrimaryContainer),
+                    GlyphIcon(Glyph.debtFree, size: 18, color: cs.onPrimaryContainer),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
@@ -196,7 +210,7 @@ class _SummaryCard extends ConsumerWidget {
                         style: t.bodyMedium?.copyWith(color: cs.onPrimaryContainer, fontWeight: FontWeight.w600),
                       ),
                     ),
-                    Icon(Icons.chevron_right, color: cs.onPrimaryContainer),
+                    GlyphIcon(Glyph.next, color: cs.onPrimaryContainer),
                   ],
                 ),
               ),
@@ -222,7 +236,7 @@ class _NextDueCard extends StatelessWidget {
     return Card(
       color: overdue ? cs.errorContainer : null,
       child: ListTile(
-        leading: Icon(overdue ? Icons.warning_amber : Icons.event_outlined, color: color),
+        leading: GlyphIcon(overdue ? Glyph.overdue : Glyph.dueDate, color: color),
         title: Text(
           '${overdue ? 'เลยกำหนดจ่ายแล้ว' : days <= 7 ? 'ใกล้ครบกำหนด' : 'ครบกำหนดถัดไป'}: ${a.account.name}',
           style: TextStyle(color: textColor, fontWeight: overdue ? FontWeight.w600 : null),
@@ -235,7 +249,7 @@ class _NextDueCard extends StatelessWidget {
           ].join(' · '),
           style: TextStyle(color: textColor),
         ),
-        trailing: Icon(Icons.chevron_right, color: textColor),
+        trailing: GlyphIcon(Glyph.next, color: textColor),
         onTap: () => openAccount(context, a.account.id),
       ),
     );
@@ -268,7 +282,7 @@ class _AvalancheCardState extends State<_AvalancheCard> {
           children: [
             Row(
               children: [
-                Icon(Icons.trending_down, color: cs.error),
+                GlyphIcon(Glyph.payFirst, color: cs.error),
                 const SizedBox(width: 8),
                 Expanded(child: Text('มีเงินเหลือ โปะอันนี้ก่อน (ดอกแพงสุด)', style: t.titleSmall)),
               ],
@@ -293,7 +307,7 @@ class _AvalancheCardState extends State<_AvalancheCard> {
               alignment: MainAxisAlignment.end,
               children: [
                 TextButton.icon(
-                  icon: const Icon(Icons.flag_outlined),
+                  icon: const GlyphIcon(Glyph.debtFree),
                   label: const Text('วางแผนปลดหนี้'),
                   onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PayoffPlanScreen())),
                 ),
@@ -351,37 +365,49 @@ class _AccountCard extends StatelessWidget {
             children: [
               Row(
                 children: [
+                  AccountBadge(a.account.type),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // The name gets the whole line beside the badge; the rate sits below.
                         Text(a.account.name, style: t.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
-                        Text(
-                          [
-                            a.account.type.label,
-                            if (a.account.cardLast4 != null) '•••• ${a.account.cardLast4}',
-                            if (a.lines.length > 1) '${a.lines.length} วงเงินย่อย',
-                          ].join(' · '),
-                          style: t.bodySmall,
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                [
+                                  a.account.type.label,
+                                  if (a.account.cardLast4 != null) '•••• ${a.account.cardLast4}',
+                                  if (a.lines.length > 1) '${a.lines.length} วงเงินย่อย',
+                                ].join(' · '),
+                                style: t.bodySmall,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            AccountRateBadge(a: a, highlight: isMostExpensive),
+                          ],
                         ),
                       ],
                     ),
                   ),
-                  AccountRateBadge(a: a, highlight: isMostExpensive),
                 ],
               ),
               if (isMostExpensive)
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
-                  child: Pill('ดอกแพงสุด', color: cs.error, icon: Icons.local_fire_department),
+                  child: Pill('ดอกแพงสุด', color: cs.error, icon: Glyph.hottest),
                 ),
               const SizedBox(height: 12),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Expanded(child: StatTile(label: 'ยอดคงค้าง', value: fmtMoney(a.totalDebt))),
+                  Expanded(child: StatTile(icon: Glyph.totalDebt, label: 'ยอดคงค้าง', value: fmtMoney(a.totalDebt))),
                   if (due.gross > 0)
                     StatTile(
+                      icon: Glyph.dueThisMonth,
                       label: 'ต้องจ่ายเดือนนี้',
                       value: due.remaining > 0.005 ? fmtMoney(due.remaining) : 'จ่ายครบแล้ว',
                       color: due.remaining > 0.005 ? null : cs.positive,
@@ -398,8 +424,8 @@ class _AccountCard extends StatelessWidget {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    Icon(
-                      days! < 0 ? Icons.warning_amber : Icons.event,
+                    GlyphIcon(
+                      days! < 0 ? Glyph.overdue : Glyph.dueDate,
                       size: 16,
                       color: days < 0 ? cs.error : (days <= 3 ? cs.warning : cs.onSurfaceVariant),
                     ),
@@ -420,7 +446,7 @@ class _AccountCard extends StatelessWidget {
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    Icon(Icons.view_timeline_outlined, size: 16, color: cs.onSurfaceVariant),
+                    GlyphIcon(Glyph.installments, size: 16, color: cs.onSurfaceVariant),
                     const SizedBox(width: 6),
                     Expanded(child: Text('ผ่อนอยู่ ${a.activePlans.length} รายการ', style: t.bodySmall)),
                   ],

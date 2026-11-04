@@ -9,6 +9,7 @@ import '../../data/sources/sms/sms_parser_service.dart';
 import '../../data/sources/statement_source_parser.dart';
 import '../providers.dart';
 import '../widgets/common.dart';
+import '../widgets/app_icons.dart';
 
 const _template = '''{
   "banks": [
@@ -144,7 +145,7 @@ class _SmsPatternsScreenState extends ConsumerState<SmsPatternsScreen> {
           if (_result != null)
             Card(margin: const EdgeInsets.only(top: 8), child: Padding(padding: const EdgeInsets.all(12), child: Text(_result!))),
           if (_error != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
-          const SectionHeader('ธนาคารที่แอพรู้จัก'),
+          const SectionHeader('ธนาคารที่แอพรู้จัก', icon: Glyph.bank),
           if (config != null)
             for (final b in config.banks)
               ListTile(

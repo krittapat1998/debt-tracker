@@ -10,6 +10,7 @@ import '../providers.dart';
 import '../widgets/common.dart';
 import 'import_review_sheet.dart';
 import 'sms_patterns_screen.dart';
+import '../widgets/app_icons.dart';
 
 /// Bank-notice import. Android: read inbox / listen for new SMS (with
 /// permission). iOS (no SMS API): paste the text; both platforms share the
@@ -170,7 +171,7 @@ class _SmsImportScreenState extends ConsumerState<SmsImportScreen> with WidgetsB
         actions: [
           IconButton(
             tooltip: 'รูปแบบ SMS ธนาคาร',
-            icon: const Icon(Icons.rule),
+            icon: const GlyphIcon(Glyph.smsRules),
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SmsPatternsScreen())),
           ),
         ],
@@ -202,7 +203,7 @@ class _SmsImportScreenState extends ConsumerState<SmsImportScreen> with WidgetsB
                     overflowSpacing: 8,
                     children: [
                       OutlinedButton.icon(
-                        icon: const Icon(Icons.content_paste),
+                        icon: const GlyphIcon(Glyph.paste),
                         label: Text(_clipboardHasText ? 'วางจากคลิปบอร์ด •' : 'วางจากคลิปบอร์ด'),
                         onPressed: _pasteFromClipboard,
                       ),
@@ -213,7 +214,7 @@ class _SmsImportScreenState extends ConsumerState<SmsImportScreen> with WidgetsB
               ),
             ),
           ),
-          SectionHeader('รอตรวจสอบ (${pending.length})'),
+          SectionHeader('รอตรวจสอบ (${pending.length})', icon: Glyph.hourglass),
           if (pending.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -241,7 +242,7 @@ class _SmsImportScreenState extends ConsumerState<SmsImportScreen> with WidgetsB
             const SizedBox(height: 10),
             if (!_hasPermission)
               FilledButton.icon(
-                icon: const Icon(Icons.lock_open),
+                icon: const GlyphIcon(Glyph.unlock),
                 label: const Text('อนุญาตอ่าน SMS'),
                 onPressed: _requestPermission,
               )
@@ -249,7 +250,7 @@ class _SmsImportScreenState extends ConsumerState<SmsImportScreen> with WidgetsB
               FilledButton.icon(
                 icon: _busy
                     ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.manage_search),
+                    : const GlyphIcon(Glyph.scan),
                 label: const Text('สแกน SMS 45 วันล่าสุด'),
                 onPressed: _busy ? null : _scan,
               ),
@@ -271,7 +272,7 @@ class _SmsImportScreenState extends ConsumerState<SmsImportScreen> with WidgetsB
     return Card(
       child: ExpansionTile(
         shape: const Border(),
-        leading: const Icon(Icons.info_outline),
+        leading: const GlyphIcon(Glyph.info),
         title: const Text('บน iPhone ใช้วิธีวางข้อความ'),
         subtitle: Text(Platform.isIOS ? 'iOS ไม่อนุญาตให้แอพอ่าน SMS ได้โดยตรง' : 'อุปกรณ์นี้อ่าน SMS ไม่ได้', style: t.bodySmall),
         childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
