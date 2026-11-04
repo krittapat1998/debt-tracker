@@ -1,7 +1,72 @@
+<p align="center">
+  <img src="docs/screenshots/hero.png" alt="Debt Tracker: ติดตามหนี้บัตรเครดิต บัตรกดเงินสด สินเชื่อ และวางแผนปลดหนี้" width="100%">
+</p>
+
+<p align="center">
+  <img alt="Flutter 3.41" src="https://img.shields.io/badge/Flutter-3.41-02569B?logo=flutter&logoColor=white">
+  <img alt="Dart 3.11" src="https://img.shields.io/badge/Dart-3.11-0175C2?logo=dart&logoColor=white">
+  <img alt="iOS 15+" src="https://img.shields.io/badge/iOS-15%2B-111111?logo=apple&logoColor=white">
+  <img alt="Android 7+" src="https://img.shields.io/badge/Android-7%2B-3DDC84?logo=android&logoColor=white">
+  <img alt="Data stays on device" src="https://img.shields.io/badge/data-on%20device-455A64">
+</p>
+
 # Debt Tracker
 
-แอพมือถือส่วนตัว (Flutter, iOS + Android) สำหรับติดตามหนี้บัตรเครดิต บัตรกดเงินสด และสินเชื่อส่วนบุคคล
-ข้อมูลทั้งหมดเก็บในเครื่อง (SQLite) ไม่มี backend/cloud
+แอพมือถือสำหรับคนที่มีหนี้หลายก้อน ทั้งบัตรเครดิต บัตรกดเงินสด และสินเชื่อส่วนบุคคล
+บอกได้ว่าเดือนนี้ต้องจ่ายเท่าไร จ่ายวันไหน ควรโปะก้อนไหนก่อน และถ้าจ่ายไหวเดือนละเท่านี้ หนี้จะหมดเมื่อไร
+ข้อมูลทั้งหมดอยู่ในเครื่อง ไม่มีเซิร์ฟเวอร์ ไม่ต้องสมัครบัญชี
+
+> **English:** a personal finance app for people juggling several debts (credit cards, cash cards, personal loans).
+> It shows what is due and when, which debt to pay off first, and when you will be debt-free on a given monthly budget.
+> Built with Flutter for iOS and Android; everything stays on the device. The UI is in Thai, with Buddhist-era dates.
+
+## ภาพหน้าจอ
+
+<table>
+  <tr>
+    <td align="center" width="25%"><img src="docs/screenshots/dashboard.png" alt="ภาพรวม"><br><b>ภาพรวม</b><br><sub>หนี้รวม ยอดต้องจ่ายเดือนนี้ และก้อนที่ควรโปะก่อน</sub></td>
+    <td align="center" width="25%"><img src="docs/screenshots/cards.png" alt="รายการบัตร"><br><b>บัตรและสินเชื่อ</b><br><sub>เรียงตามวันครบกำหนด สีบัตรเลือกได้ต่อใบ</sub></td>
+    <td align="center" width="25%"><img src="docs/screenshots/card-detail.png" alt="รายละเอียดบัตร"><br><b>รายละเอียดบัตร</b><br><sub>ขั้นต่ำ เต็มยอด ค่างวดที่บัตรยังไม่แจ้ง</sub></td>
+    <td align="center" width="25%"><img src="docs/screenshots/payoff-plan.png" alt="แผนปลดหนี้"><br><b>แผนปลดหนี้</b><br><sub>จ่ายไหวเท่านี้ หนี้หมดเดือนไหน ประหยัดดอกเท่าไร</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/payoff-chart.png" alt="กราฟแผนปลดหนี้"><br><b>กราฟยอดหนี้</b><br><sub>เทียบแบบที่ไหว แบบเต็มที่ และจ่ายแค่ขั้นต่ำ</sub></td>
+    <td align="center"><img src="docs/screenshots/calendar.png" alt="ปฏิทินครบกำหนด"><br><b>ปฏิทินครบกำหนด</b><br><sub>วันจ่ายบิล ค่างวด วันตัดรอบ รายการหักประจำ</sub></td>
+    <td align="center"><img src="docs/screenshots/history.png" alt="ประวัติ"><br><b>ประวัติ</b><br><sub>การจ่ายและยอดใช้จ่าย กรองตามบัตรได้</sub></td>
+    <td align="center"><img src="docs/screenshots/calculator.png" alt="คำนวณโปะ"><br><b>คำนวณโปะ</b><br><sub>ลดค่างวด หรือผ่อนเท่าเดิมแต่ปิดเร็วขึ้น</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/dark-dashboard.png" alt="โหมดมืด ภาพรวม"><br><b>โหมดมืด</b><br><sub>ธีมสว่าง มืด น้ำเงิน หรือตามเครื่อง</sub></td>
+    <td align="center"><img src="docs/screenshots/dark-calendar.png" alt="โหมดมืด ปฏิทิน"><br><b>โหมดมืด</b><br><sub>ปฏิทินครบกำหนด</sub></td>
+    <td colspan="2"></td>
+  </tr>
+</table>
+
+<sub>ภาพหน้าจอใช้ข้อมูลสมมติทั้งหมด สร้างใหม่ได้ด้วยสคริปต์ใน [`tool/screenshots/`](tool/screenshots/)</sub>
+
+## ฟีเจอร์เด่น
+
+- **แผนปลดหนี้**: ใส่เงินที่จ่ายหนี้ได้ต่อเดือน (รวมขั้นต่ำบัตรและค่างวดแล้ว) แอพจำลองหนี้ทุกก้อนเดือนต่อเดือน เงินที่เหลือโปะก้อนดอกแพงสุดก่อน (avalanche) แล้วบอกเดือนที่หนี้หมด ดอกเบี้ยที่ประหยัดได้ และลำดับที่แต่ละก้อนจะหมด
+- **ต้องจ่ายเท่าไร วันไหน**: ปฏิทินรวมวันครบกำหนดบัตร ค่างวด วันตัดรอบ และรายการหักประจำ พร้อมแจ้งเตือนก่อนถึงวัน
+- **คิดดอกแบบธนาคาร**: ดอกรายวันตามจำนวนวันจริง ดอกโปรโมชั่นแบบขั้นบันได flat rate พร้อมอัตราดอกที่แท้จริง lock-in และยอดปิดรวมค่าปรับ
+- **บัตรเดียวหลายวงเงิน**: วงเงินบัตรกับวงเงินสินเชื่อในบัตรใบเดียวคิดดอกต่างกันได้ ค่างวดที่ผ่อนบนบัตรลงยอดให้ทุกวันตัดรอบ
+- **คำนวณโปะ**: เทียบ "ลดค่างวด" กับ "ผ่อนเท่าเดิมแต่ปิดเร็วขึ้น" ก่อนตัดสินใจ
+- **นำเข้าจาก SMS ธนาคาร**: Android อ่าน SMS ให้ ส่วน iOS วางข้อความที่คัดลอกมา ทุกรายการต้องยืนยันก่อนบันทึก
+- **เป็นส่วนตัว**: ข้อมูลอยู่ใน SQLite ในเครื่อง ล็อกแอพด้วย Face ID และสำรองไฟล์แบบเข้ารหัส AES-256-GCM ได้
+- **ใช้ง่าย**: ไอคอน Phosphor สองโทน วันที่แบบ พ.ศ. แตะนอกช่องกรอกแล้วคีย์บอร์ดปิดเอง และมี home screen widget
+
+## เทคโนโลยีที่ใช้
+
+| ส่วน | ที่ใช้ |
+|---|---|
+| UI | Flutter 3.41, Material 3, [Phosphor Icons](https://phosphoricons.com) |
+| State | Riverpod 2 |
+| ฐานข้อมูล | sqflite (SQLite) พร้อม migration ตามเวอร์ชัน |
+| การคำนวณ | Dart ล้วนใน `lib/domain/finance/` (ผ่อนชำระ, ดอกรายวัน, แผนปลดหนี้, ปฏิทิน) แยกจาก UI |
+| เนทีฟ | iOS WidgetKit (Swift), Android SMS receiver และ widget (Kotlin) |
+| ระบบ | flutter_local_notifications, local_auth (Face ID / สแกนนิ้ว), home_widget |
+| ความปลอดภัย | `cryptography`: AES-256-GCM, PBKDF2-HMAC-SHA256 |
+| ทดสอบ | unit test สูตรคำนวณ, SMS parser, ledger และ smoke test ทุกหน้าจอ |
 
 ## เริ่มใช้งาน
 
@@ -11,9 +76,10 @@ flutter run            # เลือก iOS simulator / Android emulator / เ�
 flutter test           # unit test สูตรคำนวณ, SMS parser, ฐานข้อมูล, backup + smoke test ทุกหน้าจอ
 ```
 
-ต้องการ iOS 14+ / Android 7.0 (API 24)+
+ต้องการ iOS 15+ / Android 7.0 (API 24)+
 
-## ฟีเจอร์
+<details>
+<summary><b>ฟีเจอร์ทั้งหมดและตำแหน่งในโค้ด</b></summary>
 
 | ฟีเจอร์ | ที่อยู่ในโค้ด |
 |---|---|
@@ -37,6 +103,9 @@ flutter test           # unit test สูตรคำนวณ, SMS parser, ฐ�
 | Home screen widget | `android/.../DebtWidgetProvider.kt`, `ios/DebtWidget/DebtWidget.swift` |
 | ล็อกแอพด้วย Face ID / สแกนนิ้ว (หรือรหัสเครื่อง): ตอนเปิดแอพ และเมื่อกลับมาหลังออกไปเกิน 1 นาที; เปิด/ปิดในหน้าตั้งค่า ต้องยืนยันตัวตนก่อน | `lib/ui/widgets/app_lock_gate.dart`, `lib/platform/app_lock_service.dart` (Android ใช้ `FlutterFragmentActivity` + AppCompat LaunchTheme) |
 | ธีม (ตามระบบ / สว่าง / มืด / น้ำเงิน) เลือกในหน้าตั้งค่า, สีบัตรเลือกได้ต่อใบ (ตัวอักษรบนบัตรปรับให้อ่านง่ายเอง) | `lib/ui/theme.dart`, `lib/ui/widgets/card_colors.dart`, `settings_screen.dart` |
+| ไอคอนตามความหมาย (Phosphor สองโทน) ชุดเดียวทั้งแอพ, แตะนอกช่องกรอกแล้วคีย์บอร์ดปิด (ลากเพื่อเลื่อนไม่ปิด) | `lib/ui/widgets/app_icons.dart`, `lib/ui/widgets/keyboard_dismiss.dart` |
+
+</details>
 
 ## โครงสร้าง
 
@@ -92,7 +161,7 @@ assets/sms_patterns.json  regex ของแต่ละธนาคาร (แ�
 - แก้ `assets/sms_patterns.json` (ชื่อผู้ส่งในไฟล์เป็นตัวอย่าง — ตรวจชื่อผู้ส่งจริงในเครื่องแล้วปรับ)
 - หรือในแอพ: ตั้งค่า → รูปแบบ SMS ธนาคาร (เก็บในเครื่อง มีช่องทดสอบ)
 - มาโคร: `{AMOUNT}`, `{MONEY}` (ต้องมีคอมมาหรือทศนิยม กันสับสนกับเลขท้ายบัตร), `{DATE}` (รองรับ พ.ศ./ค.ศ., "5 พ.ย. 69"), `{CARD}`
-- ส่งตัวอย่าง SMS จริงธนาคารละ 1–2 ข้อความมา จะช่วยให้ปรับ regex ได้แม่นขึ้นมาก (เพิ่มเป็น test ใน `test/data/sms_parser_test.dart`)
+- ตัวอย่าง SMS จริงธนาคารละ 1–2 ข้อความช่วยให้ปรับ regex ได้แม่นขึ้นมาก (เพิ่มเป็น test ใน `test/data/sms_parser_test.dart`)
 
 **อีเมล (อนาคต)**: implement `StatementSourceParser` ใน `lib/data/sources/email/email_parser_service.dart`
 แล้วเพิ่มใน `statementParsersProvider` (`lib/ui/providers.dart`) — data model และ UI ไม่ต้องแก้
