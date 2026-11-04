@@ -39,7 +39,7 @@
     <td align="center"><img src="docs/screenshots/dark-dashboard.png" alt="โหมดมืด ภาพรวม"><br><b>โหมดมืด</b><br><sub>ภาพรวม</sub></td>
     <td align="center"><img src="docs/screenshots/dark-payoff-plan.png" alt="โหมดมืด แผนปลดหนี้"><br><b>โหมดมืด</b><br><sub>แผนปลดหนี้</sub></td>
     <td align="center"><img src="docs/screenshots/dark-calendar.png" alt="โหมดมืด ปฏิทิน"><br><b>โหมดมืด</b><br><sub>ปฏิทินครบกำหนด</sub></td>
-    <td align="center"><img src="docs/screenshots/dark-settings.png" alt="ตั้งค่า"><br><b>ตั้งค่า</b><br><sub>ธีมสว่าง มืด น้ำเงิน แจ้งเตือน Face ID สำรองข้อมูล</sub></td>
+    <td align="center"><img src="docs/screenshots/dark-settings.png" alt="ตั้งค่า"><br><b>ตั้งค่า</b><br><sub>ธีม แจ้งเตือน ล็อกแอพ</sub></td>
   </tr>
 </table>
 
