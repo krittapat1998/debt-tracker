@@ -3,6 +3,10 @@
 </p>
 
 <p align="center">
+  <a href="https://apps.apple.com/th/app/debt-tracker/id6829704105"><img alt="Download on the App Store" src="https://img.shields.io/badge/Download_on_the-App_Store-0D96F6?style=for-the-badge&logo=appstore&logoColor=white" height="40"></a>
+</p>
+
+<p align="center">
   <img alt="Flutter 3.41" src="https://img.shields.io/badge/Flutter-3.41-02569B?logo=flutter&logoColor=white">
   <img alt="Dart 3.11" src="https://img.shields.io/badge/Dart-3.11-0175C2?logo=dart&logoColor=white">
   <img alt="iOS 15+" src="https://img.shields.io/badge/iOS-15%2B-111111?logo=apple&logoColor=white">
@@ -19,6 +23,7 @@
 > **English:** a personal finance app for people juggling several debts (credit cards, cash cards, personal loans).
 > It shows what is due and when, which debt to pay off first, and when you will be debt-free on a given monthly budget.
 > Built with Flutter for iOS and Android; everything stays on the device. The UI is in Thai, with Buddhist-era dates.
+> [Available on the App Store](https://apps.apple.com/th/app/debt-tracker/id6829704105) (Thailand).
 
 ## ภาพหน้าจอ
 
@@ -70,6 +75,10 @@
 | ทดสอบ | unit test สูตรคำนวณ, SMS parser, ledger และ smoke test ทุกหน้าจอ |
 
 ## เริ่มใช้งาน
+
+ใช้บน iPhone ได้เลย: [ดาวน์โหลดฟรีที่ App Store](https://apps.apple.com/th/app/debt-tracker/id6829704105) (ร้านค้าประเทศไทย)
+
+รันจากซอร์สโค้ด:
 
 ```bash
 flutter pub get
